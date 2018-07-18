@@ -33,11 +33,34 @@ struct CompileTimeParam : public DefaultCompileTimeParam<Backend> {
   // use default Backend and AtomicTypes
 };
 
+// -----------------------------------------------------------------------------
 struct Foo {
   double data_[12];
   uint64_t data_1[24];
 };
 
+// -----------------------------------------------------------------------------
+template <typename T, uint64_t N>
+class MyVector {
+public:
+  MyVector() {}
+  MyVector& operator=(const MyVector& other) {
+    for(uint64_t i = 0; i < other.size_; i++) {
+      data_[i] = other.data_[i];
+    }
+  }
+  void push_back(const T& element) {
+    data_[size_++] = element;
+  }
+  uint64_t size() const { return size_; }
+  void clear() { size_ = 0; }
+  void reserve(int) {}
+ private:
+  uint64_t size_ = 0;
+  T data_[N];
+};
+
+// -----------------------------------------------------------------------------
 inline void Run(int c) {
   auto* simulation = Simulation<>::GetActive();
   auto* rm = simulation->GetResourceManager();
@@ -58,7 +81,7 @@ inline void Run(int c) {
 
   // std::cout << "size of Foo: " << sizeof(Foo) << std::endl;
   std::cout << "c " << c << std::endl;
-  Timing t("copy");
+  // thread_local MyVector<Foo, 65> patch;
   thread_local std::vector<Foo> patch;
   thread_local std::vector<decltype(patch)> copy;
 
@@ -69,25 +92,26 @@ inline void Run(int c) {
   }
 
   auto add_to_patch = [&](SoHandle neighbor_handle) {
-    patch.emplace_back(last[m[neighbor_handle.GetElementIdx()]]);
+    patch.push_back(last[m[neighbor_handle.GetElementIdx()]]);
     // rm->ApplyOnElement(neighbor_handle, [&](auto&& neighbor) {
     //   patch.emplace_back(neighbor);
     // });
   };
 
-  auto add_consecutive = [&m](const std::vector<Foo>& last, std::vector<Foo>* patch,  uint64_t idx, uint64_t num_elements) {
+  auto add_consecutive = [&](uint64_t idx, uint64_t num_elements) {
     for(uint64_t i = idx; i < idx + num_elements; i++) {
-      patch->emplace_back(last[m[i]]);
+      patch.push_back(last[m[i]]);
     }
   };
 
+  Timing t("   runtime ");
+
   #pragma omp parallel for
-  for(uint64_t i = 0; i < cells->size() - 64; i += (copy.size() + 1)) {
+  for(uint64_t i = 0; i < cells->size() - 64; i += (c + 1)) {
     patch.clear();
 
-
-    patch.emplace_back(last[m[i]]);
-    add_consecutive(last, &patch, i, 64);
+    patch.push_back(last[m[i]]);
+    add_consecutive(i, 64);
 
     for (uint64_t j = 0; j < copy.size(); j++) {
       copy[j] = patch;
@@ -97,16 +121,18 @@ inline void Run(int c) {
     // auto&& cell = (*cells)[i];
     // grid->ForEachNeighbor(add_to_patch, cell, SoHandle(0, i));
   }
-  std::cout << patch.size() << std::endl;
+  // std::cout << "patch size " << patch.size() << std::endl;
 }
 
+
+// -----------------------------------------------------------------------------
 inline int Simulate(int argc, const char** argv) {
   // 2. Create new simulation
   Simulation<> simulation(argc, argv);
   simulation.GetParam()->statistics_ = true;
 
   // 3. Define initial model - in this example: 3D grid of cells
-  size_t cells_per_dim = 128;
+  size_t cells_per_dim = 256;
   auto construct = [](const std::array<double, 3>& position) {
     Cell cell(position);
     cell.SetDiameter(30);
@@ -120,11 +146,11 @@ inline int Simulate(int argc, const char** argv) {
     ModelInitializer::Grid3D(cells_per_dim, 20, construct);
   }
 
-
   // 4. Run simulation for one timestep
   simulation.GetScheduler()->Simulate(1);
 
-  for(int i = 0; i < 20; i+=5) {
+  Run(0);
+  for(int i = 1; i <= 64; i *= 2) {
     Run(i);
   }
 
