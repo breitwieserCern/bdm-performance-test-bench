@@ -126,6 +126,15 @@ void Patch(std::vector<Agent> agents,
     }
   };
 
+  auto write_back_patch = [&mode](auto* agents, const auto& patch, uint64_t neighbors_per_agent, uint64_t current_idx) {
+    (*agents)[current_idx] = patch[0];
+    uint64_t num_agents = agents->size();
+    for(uint64_t i = 1; i < neighbors_per_agent; i++) {
+      uint64_t nidx = NeighborIndex(mode, num_agents, current_idx, i);
+      (*agents)[nidx] = patch[i];
+    }
+  };
+
   thread_local std::vector<Agent> patch;
   thread_local std::vector<Agent> copy;
   thread_local double tl_sum = 0;
@@ -145,10 +154,12 @@ void Patch(std::vector<Agent> agents,
 
     if(reuse == 0) {
       tl_sum += workload(for_each_neighbor, &patch, 0);
+      write_back_patch(&agents, patch, neighbors_per_agent, i);
     } else {
       copy = patch;
       for (uint64_t r = 0; r < reuse + 1 && r + i < num_agents; r++) {
         tl_sum += workload(for_each_neighbor, &copy, 0);
+        write_back_patch(&agents, copy, neighbors_per_agent, i);
       }
     }
   }
