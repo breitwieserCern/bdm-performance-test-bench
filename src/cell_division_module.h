@@ -34,7 +34,7 @@ class Agent {
   double Compute() {
     double sum = 0;
     for (int i = 0; i < 12; i++) {
-      sum += data_[i];
+      sum += data_[i]++;
     }
     return sum / 12.0;
   }
@@ -55,25 +55,6 @@ inline void FlushCache() {
 
 enum NeighborMode { kConsecutive, kScattered };
 
-// inline void CreateNeighbors(NeighborMode mode, uint64_t num_agents, uint64_t neighbors_per_agent, std::vector<uint64_t>* neighbor_indices) {
-//   neighbor_indices->resize(num_agents * neighbors_per_agent);
-//   switch(mode) {
-//     case kConsecutive:
-//     for(uint64_t i = 0; i < num_agents; i++) {
-//       for(uint64_t j = 0; j < neighbors_per_agent; j++) {
-//         (*neighbor_indices)[i * neighbors_per_agent + j] = i + j;
-//       }
-//     }
-//     break;
-//
-//     case kScattered:
-//     Random random;
-//     for(uint64_t i = 0; i < neighbor_indices->size(); i++) {
-//         (*neighbor_indices)[i] = std::floor(random.Uniform(num_agents));
-//     }
-//     break;
-//   }
-// }
 static std::vector<int64_t> scattered;
 
 inline uint64_t NeighborIndex(NeighborMode mode, uint64_t num_agents, uint64_t current_idx, uint64_t num_neighbor) {
@@ -87,12 +68,12 @@ inline uint64_t NeighborIndex(NeighborMode mode, uint64_t num_agents, uint64_t c
 
 // -----------------------------------------------------------------------------
 template <typename TWorkload>
-void Classic(std::vector<Agent>* agents,
+void Classic(std::vector<Agent> agents,
              NeighborMode mode,
              uint64_t neighbors_per_agent,
              TWorkload workload) {
 
-  const uint64_t num_agents = agents->size();
+  const uint64_t num_agents = agents.size();
 
   auto for_each_neighbor = [&num_agents, &neighbors_per_agent, &mode](uint64_t current_idx, std::vector<Agent>* agents, auto workload_per_cell) {
     double sum = 0;
@@ -106,8 +87,8 @@ void Classic(std::vector<Agent>* agents,
   Timing timer("classic");
   thread_local double tl_sum = 0;
   #pragma omp parallel for
-  for (uint64_t i = 0; i < agents->size(); i++) {
-    tl_sum += workload(for_each_neighbor, agents, i);
+  for (uint64_t i = 0; i < agents.size(); i++) {
+    tl_sum += workload(for_each_neighbor, &agents, i);
   }
 
   double total_sum = 0;
@@ -121,11 +102,11 @@ void Classic(std::vector<Agent>* agents,
 
 // -----------------------------------------------------------------------------
 template <typename TWorkload>
-void Patch(const std::vector<Agent>& agents,
-             NeighborMode mode,
-             uint64_t neighbors_per_agent,
-             TWorkload workload,
-             uint64_t reuse) {
+void Patch(std::vector<Agent> agents,
+           NeighborMode mode,
+           uint64_t neighbors_per_agent,
+           TWorkload workload,
+           uint64_t reuse) {
 
   const uint64_t num_agents = agents.size();
 
@@ -167,7 +148,7 @@ void Patch(const std::vector<Agent>& agents,
     } else {
       copy = patch;
       for (uint64_t r = 0; r < reuse + 1 && r + i < num_agents; r++) {
-        tl_sum += workload(for_each_neighbor, &patch, 0);
+        tl_sum += workload(for_each_neighbor, &copy, 0);
       }
     }
   }
@@ -203,7 +184,7 @@ inline void Run(uint64_t num_agents, uint64_t neighbors_per_agent, NeighborMode 
 
   FlushCache();
 
-  Classic(&agents, mode, neighbors_per_agent, workload);
+  Classic(agents, mode, neighbors_per_agent, workload);
 
   std::vector<uint64_t> reuse_vals = {0, 1, 2, 4, 8, 16, 32, 64};
   for(auto& r : reuse_vals) {
