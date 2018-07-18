@@ -1,47 +1,41 @@
-// -----------------------------------------------------------------------------
-//
-// Copyright (C) The BioDynaMo Project.
-// All Rights Reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-//
-// See the LICENSE file distributed with this work for details.
-// See the NOTICE file distributed with this work for additional information
-// regarding copyright ownership.
-//
-// -----------------------------------------------------------------------------
+#include <cstdlib>
+#include <vector>
+#include <string>
+#include <iostream>
 
-#ifndef DEMO_CELL_DIVISION_MODULE_H_
-#define DEMO_CELL_DIVISION_MODULE_H_
-
-#include "biodynamo.h"
-
-namespace bdm {
+#include "timer.h"
 
 // -----------------------------------------------------------------------------
 class Agent {
  public:
   Agent() {
-    for(uint64_t i = 0; i < 12; i++) {
+    for(uint64_t i = 0; i < 36; i++) {
        data_[i] = 1;
-    }
-    for(uint64_t i = 0; i < 24; i++) {
-       data_1_[i] = i;
     }
   }
 
   double Compute() {
     double sum = 0;
-    for (int i = 0; i < 12; i++) {
-      sum += data_[i]++;
+    for (int i = 0; i < 36; i++) {
+      sum += data_[i];
     }
+    return sum / 36.0;
+  }
+
+  // not all data members of are accessed or updated
+  double ComputeNeighbor() {
+    double sum = 0;
+    for (int i = 0; i < 12; i++) {
+      sum += data_[i];
+    }
+    // for (int i = 0; i < 6; i++) {
+    //   sum += data_[i]++;
+    // }
     return sum / 12.0;
   }
 
  private:
-  double data_[12];
-  uint64_t data_1_[24];
+  double data_[36];
 };
 
 inline void FlushCache() {
@@ -75,17 +69,20 @@ void Classic(std::vector<Agent> agents,
 
   const uint64_t num_agents = agents.size();
 
-  auto for_each_neighbor = [&num_agents, &neighbors_per_agent, &mode](uint64_t current_idx, std::vector<Agent>* agents, auto workload_per_cell) {
+  auto for_each_neighbor = [&num_agents, &neighbors_per_agent, &mode](uint64_t current_idx, std::vector<Agent>* agents, auto workload_neighbor) {
     double sum = 0;
     for (uint64_t i = 0; i < neighbors_per_agent; i++) {
       uint64_t nidx = NeighborIndex(mode, num_agents, current_idx, i);
-      sum += workload_per_cell(&((*agents)[nidx]));
+      sum += workload_neighbor(&((*agents)[nidx]));
     }
     return sum;
   };
 
-  Timing timer("classic");
   thread_local double tl_sum = 0;
+  #pragma omp parallel
+  tl_sum = 0;
+
+  Timer timer("classic");
   #pragma omp parallel for
   for (uint64_t i = 0; i < agents.size(); i++) {
     tl_sum += workload(for_each_neighbor, &agents, i);
@@ -137,15 +134,17 @@ void Patch(std::vector<Agent> agents,
 
   thread_local std::vector<Agent> patch;
   thread_local std::vector<Agent> copy;
+  thread_local std::vector<Agent> write_back_cache;
   thread_local double tl_sum = 0;
 
   #pragma omp parallel
   {
     patch.reserve(neighbors_per_agent);
+    write_back_cache.clear();
     tl_sum = 0;
   }
 
-  Timing timer("Patch  ");
+  Timer timer("Patch  ");
   #pragma omp parallel for
   for (uint64_t i = 0; i < num_agents; i += (reuse + 1)) {
     patch.clear();
@@ -159,8 +158,12 @@ void Patch(std::vector<Agent> agents,
       copy = patch;
       for (uint64_t r = 0; r < reuse + 1 && r + i < num_agents; r++) {
         tl_sum += workload(for_each_neighbor, &copy, 0);
-        write_back_patch(&agents, copy, neighbors_per_agent, i);
+        write_back_cache = copy;
+        // for (int el = 0; el < neighbors_per_agent; el++) {
+        //   write_back_cache[el] += copy[el];
+        // }
       }
+      write_back_patch(&agents, write_back_cache, neighbors_per_agent, i);
     }
   }
 
@@ -180,13 +183,12 @@ inline void Run(uint64_t num_agents, uint64_t neighbors_per_agent, NeighborMode 
   std::vector<Agent> agents;
   agents.resize(num_agents);
 
-  std::vector<uint64_t> neighbor_indices;
-
   if(mode == kScattered) {
-    Random random;
     scattered.resize(neighbors_per_agent);
     for (uint64_t i = 0; i < neighbors_per_agent; i++) {
-      scattered[i] = static_cast<int64_t>(random.Uniform(-1e5, 1e5));
+      int range = 1e5;
+      double r = (rand() / RAND_MAX - 0.5) * range; // r (-range, range)
+      scattered[i] = static_cast<int64_t>(r);
     }
     std::cout << std::endl << "memory offsets: " << std::endl;
     for (auto& el : scattered) { std::cout << el << ", ";}
@@ -211,7 +213,7 @@ inline void PrintNewSection(const std::string& message) {
 }
 
 // -----------------------------------------------------------------------------
-inline int Simulate(int argc, const char** argv) {
+int main(int argc, const char** argv) {
   uint64_t num_agents =  1e7;
   uint64_t neighbors_per_agent = 9;
 
@@ -222,6 +224,12 @@ inline int Simulate(int argc, const char** argv) {
 
   auto workload_per_cell = [](Agent* current) {
     double sum = 0;
+    sum += current->ComputeNeighbor();
+    return sum;
+  };
+
+  auto workload_neighbor = [](Agent* current) {
+    double sum = 0;
     sum += current->Compute();
     return sum;
   };
@@ -230,7 +238,7 @@ inline int Simulate(int argc, const char** argv) {
     double sum = 0;
     Agent* current = &((*agents)[current_idx]);
     sum += workload_per_cell(current);
-    sum += for_each_neighbor(current_idx, agents, workload_per_cell);
+    sum += for_each_neighbor(current_idx, agents, workload_neighbor);
     return sum;
   };
 
@@ -245,7 +253,3 @@ inline int Simulate(int argc, const char** argv) {
 
   return 0;
 }
-
-}  // namespace bdm
-
-#endif  // DEMO_CELL_DIVISION_MODULE_H_
