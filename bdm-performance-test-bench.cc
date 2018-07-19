@@ -1,9 +1,17 @@
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
 
 #include "timer.h"
+
+// -----------------------------------------------------------------------------
+#define EXPECT_NEAR(expected, actual)                                        \
+  if (std::fabs((expected) - (actual)) > 1e-5) {                             \
+    std::cerr << "\033[1;31mWrong result on line: " << __LINE__ << "\033[0m" \
+              << std::endl;                                                  \
+  }
 
 // -----------------------------------------------------------------------------
 class Agent {
@@ -63,8 +71,8 @@ inline uint64_t NeighborIndex(NeighborMode mode, uint64_t num_agents,
 
 // -----------------------------------------------------------------------------
 template <typename TWorkload>
-void Classic(std::vector<Agent> agents, NeighborMode mode,
-             uint64_t neighbors_per_agent, TWorkload workload) {
+double Classic(std::vector<Agent> agents, NeighborMode mode,
+               uint64_t neighbors_per_agent, TWorkload workload) {
   const uint64_t num_agents = agents.size();
 
   auto for_each_neighbor = [&num_agents, &neighbors_per_agent, &mode](
@@ -95,12 +103,13 @@ void Classic(std::vector<Agent> agents, NeighborMode mode,
     total_sum += tl_sum;
   }
   std::cout << "    result: " << total_sum << std::endl;
+  return total_sum;
 }
 
 // -----------------------------------------------------------------------------
 template <typename TWorkload>
-void Patch(std::vector<Agent> agents, NeighborMode mode,
-           uint64_t neighbors_per_agent, TWorkload workload, uint64_t reuse) {
+double Patch(std::vector<Agent> agents, NeighborMode mode,
+             uint64_t neighbors_per_agent, TWorkload workload, uint64_t reuse) {
   const uint64_t num_agents = agents.size();
 
   auto for_each_neighbor = [](uint64_t current_idx, std::vector<Agent>* patch,
@@ -176,6 +185,7 @@ void Patch(std::vector<Agent> agents, NeighborMode mode,
   }
   std::cout << "    result: " << total_sum << std::endl;
   std::cout << "    reuse : " << reuse << std::endl;
+  return total_sum;
 }
 
 // -----------------------------------------------------------------------------
@@ -189,7 +199,8 @@ inline void Run(uint64_t num_agents, uint64_t neighbors_per_agent,
     scattered.resize(neighbors_per_agent);
     for (uint64_t i = 0; i < neighbors_per_agent; i++) {
       int range = 1e5;
-      double r = (rand() / static_cast<double>(RAND_MAX) - 0.5) * range;  // r (-range, range)
+      double r = (rand() / static_cast<double>(RAND_MAX) - 0.5) *
+                 range;  // r (-range, range)
       scattered[i] = static_cast<int64_t>(r);
     }
     std::cout << std::endl << "memory offsets: " << std::endl;
@@ -201,12 +212,14 @@ inline void Run(uint64_t num_agents, uint64_t neighbors_per_agent,
 
   FlushCache();
 
-  Classic(agents, mode, neighbors_per_agent, workload);
+  double expected = num_agents + num_agents * neighbors_per_agent;
+  EXPECT_NEAR(Classic(agents, mode, neighbors_per_agent, workload), expected);
 
   std::vector<uint64_t> reuse_vals = {0, 1, 2, 4, 8, 16, 32, 64};
   for (auto& r : reuse_vals) {
     FlushCache();
-    Patch(agents, mode, neighbors_per_agent, workload, r);
+    EXPECT_NEAR(Patch(agents, mode, neighbors_per_agent, workload, r),
+                expected);
   }
 }
 
