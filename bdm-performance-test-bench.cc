@@ -54,9 +54,9 @@ static std::vector<int64_t> scattered;
 inline uint64_t NeighborIndex(NeighborMode mode, uint64_t num_agents,
                               uint64_t current_idx, uint64_t num_neighbor) {
   if (mode == kConsecutive) {
-    return std::min(num_agents, current_idx + num_neighbor + 1);
+    return std::min(num_agents - 1, current_idx + num_neighbor + 1);
   } else if (mode == kScattered) {
-    return std::min(num_agents, current_idx + scattered[num_neighbor]);
+    return std::min(num_agents - 1, current_idx + scattered[num_neighbor]);
   }
   throw false;
 }
@@ -189,7 +189,7 @@ inline void Run(uint64_t num_agents, uint64_t neighbors_per_agent,
     scattered.resize(neighbors_per_agent);
     for (uint64_t i = 0; i < neighbors_per_agent; i++) {
       int range = 1e5;
-      double r = (rand() / RAND_MAX - 0.5) * range;  // r (-range, range)
+      double r = (rand() / static_cast<double>(RAND_MAX) - 0.5) * range;  // r (-range, range)
       scattered[i] = static_cast<int64_t>(r);
     }
     std::cout << std::endl << "memory offsets: " << std::endl;
