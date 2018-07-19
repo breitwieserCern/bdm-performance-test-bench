@@ -107,7 +107,6 @@ double Classic(std::vector<Agent> agents, NeighborMode mode,
 #pragma omp critical
     total_sum += tl_sum;
   }
-  // std::cout << "    result: " << total_sum << std::endl;
   return total_sum;
 }
 
@@ -159,7 +158,7 @@ double Patch(std::vector<Agent> agents, NeighborMode mode,
     tl_sum = 0;
   }
   std::string padding = reuse < 10 ? " " : "";
-  Timer timer(padding  + std::to_string(reuse) + " Patch");
+  Timer timer(padding + std::to_string(reuse) + " Patch");
 #pragma omp parallel for
   for (uint64_t i = 0; i < num_agents; i += (reuse + 1)) {
     patch.clear();
@@ -188,14 +187,14 @@ double Patch(std::vector<Agent> agents, NeighborMode mode,
 #pragma omp critical
     total_sum += tl_sum;
   }
-  // std::cout << "    result: " << total_sum << std::endl;
   return total_sum;
 }
 
 // -----------------------------------------------------------------------------
 template <typename TWorkload>
 inline void Run(uint64_t num_agents, uint64_t neighbors_per_agent,
-                NeighborMode mode, TWorkload workload) {
+                uint64_t num_neighbor_ops, NeighborMode mode,
+                TWorkload workload) {
   std::vector<Agent> agents;
   agents.resize(num_agents);
 
@@ -216,7 +215,8 @@ inline void Run(uint64_t num_agents, uint64_t neighbors_per_agent,
 
   FlushCache();
 
-  double expected = num_agents + num_agents * neighbors_per_agent;
+  double expected =
+      num_agents + num_agents * neighbors_per_agent * num_neighbor_ops;
   EXPECT_NEAR(Classic(agents, mode, neighbors_per_agent, workload), expected);
 
   std::vector<uint64_t> reuse_vals = {0, 1, 2, 4, 8, 16, 32, 64};
@@ -237,10 +237,12 @@ inline void PrintNewSection(const std::string& message) {
 int main(int argc, const char** argv) {
   uint64_t num_agents = 1e7;
   uint64_t neighbors_per_agent = 9;
+  uint64_t num_neighbor_ops = 1;
 
-  if (argc == 3) {
+  if (argc == 4) {
     num_agents = std::atoi(argv[1]);
     neighbors_per_agent = std::atoi(argv[2]);
+    num_neighbor_ops = std::atoi(argv[3]);
   }
 
   auto workload_per_cell = [](Agent* current) {
@@ -260,7 +262,9 @@ int main(int argc, const char** argv) {
     double sum = 0;
     Agent* current = &((*agents)[current_idx]);
     sum += workload_per_cell(current);
-    sum += for_each_neighbor(current_idx, agents, workload_neighbor);
+    for (uint64_t i = 0; i < num_neighbor_ops; i++) {
+      sum += for_each_neighbor(current_idx, agents, workload_neighbor);
+    }
     return sum;
   };
 
@@ -268,10 +272,11 @@ int main(int argc, const char** argv) {
   std::cout << "Result for one agent: " << workload_per_cell(&a) << std::endl;
 
   PrintNewSection("strided access pattern");
-  Run(num_agents, neighbors_per_agent, kConsecutive, workload);
+  Run(num_agents, neighbors_per_agent, num_neighbor_ops, kConsecutive,
+      workload);
 
   PrintNewSection("scattered access pattern");
-  Run(num_agents, neighbors_per_agent, kScattered, workload);
+  Run(num_agents, neighbors_per_agent, num_neighbor_ops, kScattered, workload);
 
   return 0;
 }
