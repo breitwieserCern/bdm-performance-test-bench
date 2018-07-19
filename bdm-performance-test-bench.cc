@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "param.h"
 #include "timer.h"
 
 // -----------------------------------------------------------------------------
@@ -64,12 +65,13 @@ enum NeighborMode { kConsecutive, kScattered };
 
 static std::vector<int64_t> scattered;
 
-inline uint64_t NeighborIndex(NeighborMode mode, uint64_t num_agents,
-                              uint64_t current_idx, uint64_t num_neighbor) {
+inline uint64_t NeighborIndex(NeighborMode mode, uint64_t current_idx,
+                              uint64_t num_neighbor) {
   if (mode == kConsecutive) {
-    return std::min(num_agents - 1, current_idx + num_neighbor + 1);
+    return std::min(Param::num_agents_ - 1, current_idx + num_neighbor + 1);
   } else if (mode == kScattered) {
-    return std::min(num_agents - 1, current_idx + scattered[num_neighbor]);
+    return std::min(Param::num_agents_ - 1,
+                    current_idx + scattered[num_neighbor]);
   }
   throw false;
 }
@@ -77,15 +79,13 @@ inline uint64_t NeighborIndex(NeighborMode mode, uint64_t num_agents,
 // -----------------------------------------------------------------------------
 template <typename TWorkload>
 double Classic(std::vector<Agent> agents, NeighborMode mode,
-               uint64_t neighbors_per_agent, TWorkload workload) {
-  const uint64_t num_agents = agents.size();
-
-  auto for_each_neighbor = [&num_agents, &neighbors_per_agent, &mode](
-      uint64_t current_idx, std::vector<Agent>* agents,
-      auto workload_neighbor) {
+               TWorkload workload) {
+  auto for_each_neighbor = [&mode](uint64_t current_idx,
+                                   std::vector<Agent>* agents,
+                                   auto workload_neighbor) {
     double sum = 0;
-    for (uint64_t i = 0; i < neighbors_per_agent; i++) {
-      uint64_t nidx = NeighborIndex(mode, num_agents, current_idx, i);
+    for (uint64_t i = 0; i < Param::neighbors_per_agent_; i++) {
+      uint64_t nidx = NeighborIndex(mode, current_idx, i);
       sum += workload_neighbor(&((*agents)[nidx]));
     }
     return sum;
@@ -112,9 +112,9 @@ double Classic(std::vector<Agent> agents, NeighborMode mode,
 
 // -----------------------------------------------------------------------------
 template <typename TWorkload>
-double Patch(std::vector<Agent> agents, NeighborMode mode,
-             uint64_t neighbors_per_agent, TWorkload workload, uint64_t reuse) {
-  const uint64_t num_agents = agents.size();
+double Patch(std::vector<Agent> agents, NeighborMode mode, TWorkload workload,
+             uint64_t reuse) {
+  const uint64_t num_agents = Param::num_agents_;
 
   auto for_each_neighbor = [](uint64_t current_idx, std::vector<Agent>* patch,
                               auto workload_per_cell) {
@@ -126,22 +126,18 @@ double Patch(std::vector<Agent> agents, NeighborMode mode,
   };
 
   auto add_neighbors_to_patch = [&mode](const auto& agents, auto* patch,
-                                        uint64_t neighbors_per_agent,
                                         uint64_t current_idx) {
-    uint64_t num_agents = agents.size();
-    for (uint64_t i = 0; i < neighbors_per_agent; i++) {
-      uint64_t nidx = NeighborIndex(mode, num_agents, current_idx, i);
+    for (uint64_t i = 0; i < Param::neighbors_per_agent_; i++) {
+      uint64_t nidx = NeighborIndex(mode, current_idx, i);
       patch->push_back(agents[nidx]);
     }
   };
 
   auto write_back_patch = [&mode](auto* agents, const auto& patch,
-                                  uint64_t neighbors_per_agent,
                                   uint64_t current_idx) {
     (*agents)[current_idx] = patch[0];
-    uint64_t num_agents = agents->size();
-    for (uint64_t i = 1; i < neighbors_per_agent; i++) {
-      uint64_t nidx = NeighborIndex(mode, num_agents, current_idx, i);
+    for (uint64_t i = 1; i < Param::neighbors_per_agent_; i++) {
+      uint64_t nidx = NeighborIndex(mode, current_idx, i);
       (*agents)[nidx] = patch[i];
     }
   };
@@ -153,7 +149,7 @@ double Patch(std::vector<Agent> agents, NeighborMode mode,
 
 #pragma omp parallel
   {
-    patch.reserve(neighbors_per_agent);
+    patch.reserve(Param::neighbors_per_agent_);
     write_back_cache.clear();
     tl_sum = 0;
   }
@@ -163,21 +159,21 @@ double Patch(std::vector<Agent> agents, NeighborMode mode,
   for (uint64_t i = 0; i < num_agents; i += (reuse + 1)) {
     patch.clear();
     patch.push_back(agents[i]);
-    add_neighbors_to_patch(agents, &patch, neighbors_per_agent, i);
+    add_neighbors_to_patch(agents, &patch, i);
 
     if (reuse == 0) {
       tl_sum += workload(for_each_neighbor, &patch, 0);
-      write_back_patch(&agents, patch, neighbors_per_agent, i);
+      write_back_patch(&agents, patch, i);
     } else {
       copy = patch;
       for (uint64_t r = 0; r < reuse + 1 && r + i < num_agents; r++) {
         tl_sum += workload(for_each_neighbor, &copy, 0);
         write_back_cache = copy;
-        // for (int el = 0; el < neighbors_per_agent; el++) {
+        // for (int el = 0; el < Param::neighbors_per_agent_; el++) {
         //   write_back_cache[el] += copy[el];
         // }
       }
-      write_back_patch(&agents, write_back_cache, neighbors_per_agent, i);
+      write_back_patch(&agents, write_back_cache, i);
     }
   }
 
@@ -192,16 +188,14 @@ double Patch(std::vector<Agent> agents, NeighborMode mode,
 
 // -----------------------------------------------------------------------------
 template <typename TWorkload>
-inline void Run(uint64_t num_agents, uint64_t neighbors_per_agent,
-                uint64_t num_neighbor_ops, NeighborMode mode,
-                TWorkload workload) {
+inline void Run(NeighborMode mode, TWorkload workload) {
   std::vector<Agent> agents;
-  agents.resize(num_agents);
+  agents.resize(Param::num_agents_);
 
   if (mode == kScattered) {
-    scattered.resize(neighbors_per_agent);
-    for (uint64_t i = 0; i < neighbors_per_agent; i++) {
-      int range = 1e5;
+    scattered.resize(Param::neighbors_per_agent_);
+    for (uint64_t i = 0; i < Param::neighbors_per_agent_; i++) {
+      int range = Param::neighbor_range_;
       double r = (rand() / static_cast<double>(RAND_MAX) - 0.5) *
                  range;  // r (-range, range)
       scattered[i] = static_cast<int64_t>(r);
@@ -216,14 +210,14 @@ inline void Run(uint64_t num_agents, uint64_t neighbors_per_agent,
   FlushCache();
 
   double expected =
-      num_agents + num_agents * neighbors_per_agent * num_neighbor_ops;
-  EXPECT_NEAR(Classic(agents, mode, neighbors_per_agent, workload), expected);
+      Param::num_agents_ *
+      (1 + Param::neighbors_per_agent_ * Param::num_neighbor_ops_);
+  EXPECT_NEAR(Classic(agents, mode, workload), expected);
 
   std::vector<uint64_t> reuse_vals = {0, 1, 2, 4, 8, 16, 32, 64};
   for (auto& r : reuse_vals) {
     FlushCache();
-    EXPECT_NEAR(Patch(agents, mode, neighbors_per_agent, workload, r),
-                expected);
+    EXPECT_NEAR(Patch(agents, mode, workload, r), expected);
   }
 }
 
@@ -235,14 +229,18 @@ inline void PrintNewSection(const std::string& message) {
 
 // -----------------------------------------------------------------------------
 int main(int argc, const char** argv) {
-  uint64_t num_agents = 1e7;
-  uint64_t neighbors_per_agent = 9;
-  uint64_t num_neighbor_ops = 1;
-
-  if (argc == 4) {
-    num_agents = std::atoi(argv[1]);
-    neighbors_per_agent = std::atoi(argv[2]);
-    num_neighbor_ops = std::atoi(argv[3]);
+  if (argc == 5) {
+    Param::num_agents_ = std::atoi(argv[1]);
+    Param::neighbors_per_agent_ = std::atoi(argv[2]);
+    Param::num_neighbor_ops_ = std::atoi(argv[3]);
+    Param::neighbor_range_ = std::atoi(argv[4]);
+  } else if (argc != 1) {
+    std::cout << "Wrong number of arguments!" << std::endl
+              << "Usage: " << std::endl
+              << "./bdm-performance-test-bench num_agents neighbors_per_agent "
+                 "num_neighbor_ops neighbor_range"
+              << std::endl;
+    return 1;
   }
 
   auto workload_per_cell = [](Agent* current) {
@@ -262,7 +260,7 @@ int main(int argc, const char** argv) {
     double sum = 0;
     Agent* current = &((*agents)[current_idx]);
     sum += workload_per_cell(current);
-    for (uint64_t i = 0; i < num_neighbor_ops; i++) {
+    for (uint64_t i = 0; i < Param::num_neighbor_ops_; i++) {
       sum += for_each_neighbor(current_idx, agents, workload_neighbor);
     }
     return sum;
@@ -272,11 +270,10 @@ int main(int argc, const char** argv) {
   std::cout << "Result for one agent: " << workload_per_cell(&a) << std::endl;
 
   PrintNewSection("strided access pattern");
-  Run(num_agents, neighbors_per_agent, num_neighbor_ops, kConsecutive,
-      workload);
+  Run(kConsecutive, workload);
 
   PrintNewSection("scattered access pattern");
-  Run(num_agents, neighbors_per_agent, num_neighbor_ops, kScattered, workload);
+  Run(kScattered, workload);
 
   return 0;
 }
