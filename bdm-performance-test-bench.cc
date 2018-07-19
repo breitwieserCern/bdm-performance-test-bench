@@ -17,33 +17,38 @@
 class Agent {
  public:
   Agent() {
-    for (uint64_t i = 0; i < 36; i++) {
-      data_[i] = 1;
+    for (uint64_t i = 0; i < 18; i++) {
+      data_r_[i] = 1;
+    }
+    for (uint64_t i = 0; i < 18; i++) {
+      data_w_[i] = 1;
     }
   }
 
   double Compute() {
     double sum = 0;
-    for (int i = 0; i < 36; i++) {
-      sum += data_[i];
+    for (int i = 0; i < 18; i++) {
+      sum += data_r_[i];
+      data_w_[i]++;
     }
-    return sum / 36.0;
+    return sum / 18.0;
   }
 
-  // not all data members of are accessed or updated
+  // not all data members of neighbors are accessed or updated
   double ComputeNeighbor() {
     double sum = 0;
-    for (int i = 0; i < 12; i++) {
-      sum += data_[i];
+    for (int i = 0; i < 9; i++) {
+      sum += data_r_[i];
     }
-    // for (int i = 0; i < 6; i++) {
-    //   sum += data_[i]++;
-    // }
-    return sum / 12.0;
+    for (int i = 0; i < 6; i++) {
+      data_w_[i]++;
+    }
+    return sum / 9.0;
   }
 
  private:
-  double data_[36];
+  double data_r_[18];
+  double data_w_[18];
 };
 
 inline void FlushCache() {
@@ -90,7 +95,7 @@ double Classic(std::vector<Agent> agents, NeighborMode mode,
 #pragma omp parallel
   tl_sum = 0;
 
-  Timer timer("classic");
+  Timer timer("classic ");
 #pragma omp parallel for
   for (uint64_t i = 0; i < agents.size(); i++) {
     tl_sum += workload(for_each_neighbor, &agents, i);
@@ -102,7 +107,7 @@ double Classic(std::vector<Agent> agents, NeighborMode mode,
 #pragma omp critical
     total_sum += tl_sum;
   }
-  std::cout << "    result: " << total_sum << std::endl;
+  // std::cout << "    result: " << total_sum << std::endl;
   return total_sum;
 }
 
@@ -153,8 +158,8 @@ double Patch(std::vector<Agent> agents, NeighborMode mode,
     write_back_cache.clear();
     tl_sum = 0;
   }
-
-  Timer timer("Patch  ");
+  std::string padding = reuse < 10 ? " " : "";
+  Timer timer(padding  + std::to_string(reuse) + " Patch");
 #pragma omp parallel for
   for (uint64_t i = 0; i < num_agents; i += (reuse + 1)) {
     patch.clear();
@@ -183,8 +188,7 @@ double Patch(std::vector<Agent> agents, NeighborMode mode,
 #pragma omp critical
     total_sum += tl_sum;
   }
-  std::cout << "    result: " << total_sum << std::endl;
-  std::cout << "    reuse : " << reuse << std::endl;
+  // std::cout << "    result: " << total_sum << std::endl;
   return total_sum;
 }
 
