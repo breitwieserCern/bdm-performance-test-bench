@@ -77,7 +77,7 @@ inline void FlushCache() {
   const uint64_t bigger_than_cachesize = 100 * 1024 * 1024;
   char* buffer = new char[bigger_than_cachesize];
   for (uint64_t i = 0; i < bigger_than_cachesize; i++) {
-    buffer[i] = rand();
+    buffer[i] = Param::num_agents_;
   }
   delete buffer;
 }
