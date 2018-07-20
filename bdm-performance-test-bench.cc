@@ -6,6 +6,7 @@
 #include <random>
 #include <algorithm>
 #include <iterator>
+#include <parallel/algorithm>
 
 #include "param.h"
 #include "timer.h"
@@ -62,6 +63,10 @@ class Agent {
 
   bool operator<(const Agent& other) {
     return uuid_ < other.uuid_;
+  }
+
+  friend bool operator<(const Agent& lhs, const Agent& rhs) {
+    return lhs.uuid_ < rhs.uuid_;
   }
 
  private:
@@ -140,7 +145,7 @@ void Sort(std::vector<Agent> agents) {
 
   std::shuffle(agents.begin(), agents.end(), g);
   Timer timer("sort    ");
-  std::sort(agents.begin(), agents.end());
+  __gnu_parallel::sort(agents.begin(), agents.end());
 }
 
 // -----------------------------------------------------------------------------
@@ -160,9 +165,9 @@ double Patch(std::vector<Agent> agents, NeighborMode mode, TWorkload workload,
 
   auto add_neighbors_to_patch = [&mode](const auto& agents, auto* patch,
                                         uint64_t current_idx) {
-    for (uint64_t i = 0; i < Param::neighbors_per_agent_; i++) {
+    for (uint64_t i = 1; i < Param::neighbors_per_agent_ + 1; i++) {
       uint64_t nidx = NeighborIndex(mode, current_idx, i);
-      patch->push_back(agents[nidx]);
+      (*patch)[i] = agents[nidx];
     }
   };
 
@@ -182,7 +187,7 @@ double Patch(std::vector<Agent> agents, NeighborMode mode, TWorkload workload,
 
 #pragma omp parallel
   {
-    patch.reserve(Param::neighbors_per_agent_);
+    patch.resize(Param::neighbors_per_agent_ + 1);
     write_back_cache.clear();
     tl_sum = 0;
   }
@@ -190,8 +195,7 @@ double Patch(std::vector<Agent> agents, NeighborMode mode, TWorkload workload,
   Timer timer(padding + std::to_string(reuse) + " Patch");
 #pragma omp parallel for
   for (uint64_t i = 0; i < num_agents; i += (reuse + 1)) {
-    patch.clear();
-    patch.push_back(agents[i]);
+    patch[0] = agents[i];
     add_neighbors_to_patch(agents, &patch, i);
 
     if (reuse == 0) {
@@ -291,7 +295,7 @@ int main(int argc, const char** argv) {
     return sum;
   };
 
-  auto workload = [&](auto for_each_neighbor, std::vector<Agent>* agents,
+  auto workload = [&](auto for_each_neighbor, auto* agents,
                       uint64_t current_idx) {
     double sum = 0;
     Agent* current = &((*agents)[current_idx]);
