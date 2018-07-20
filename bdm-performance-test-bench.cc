@@ -1,3 +1,5 @@
+// g++ -Wall -std=c++17 -g -O3 -fopenmp -D_GLIBCXX_PARALLEL bdm-performance-test-bench.cc -o bdm-performance-test-bench
+
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -244,14 +246,11 @@ inline void Run(NeighborMode mode, TWorkload workload) {
     std::cout << std::endl << std::endl;
   }
 
-  FlushCache();
-  Sort(agents);
-
-  FlushCache();
-
   double expected =
       Param::num_agents_ *
       (1 + Param::neighbors_per_agent_ * Param::num_neighbor_ops_);
+
+  FlushCache();
   EXPECT_NEAR(Classic(agents, mode, workload), expected);
 
   std::vector<uint64_t> reuse_vals = {0, 1, 2, 4, 8, 16, 32, 64};
@@ -259,6 +258,9 @@ inline void Run(NeighborMode mode, TWorkload workload) {
     FlushCache();
     EXPECT_NEAR(Patch(agents, mode, workload, r), expected);
   }
+
+  FlushCache();
+  Sort(agents);
 }
 
 inline void PrintNewSection(const std::string& message) {
