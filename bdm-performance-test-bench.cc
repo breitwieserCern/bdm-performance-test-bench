@@ -3,6 +3,9 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <random>
+#include <algorithm>
+#include <iterator>
 
 #include "param.h"
 #include "timer.h"
@@ -17,7 +20,7 @@
 // -----------------------------------------------------------------------------
 class Agent {
  public:
-  Agent() {
+  Agent() : uuid_(counter_++) {
     for (uint64_t i = 0; i < 18; i++) {
       data_r_[i] = 1;
     }
@@ -47,10 +50,28 @@ class Agent {
     return sum / 9.0;
   }
 
+  Agent& operator+=(Agent& other) {
+    // for (int i = 0; i < 9; i++) {
+    //   data_r_[i] += other.data_r_[i];
+    // }
+    for (int i = 0; i < 6; i++) {
+      data_w_[i] += other.data_w_[i];
+    }
+    return *this;
+  }
+
+  bool operator<(const Agent& other) {
+    return uuid_ < other.uuid_;
+  }
+
  private:
+  static uint64_t counter_;
+  uint64_t uuid_;
   double data_r_[18];
   double data_w_[18];
 };
+
+uint64_t Agent::counter_ = 0;
 
 inline void FlushCache() {
   const uint64_t bigger_than_cachesize = 100 * 1024 * 1024;
@@ -72,6 +93,7 @@ inline uint64_t NeighborIndex(NeighborMode mode, uint64_t current_idx,
   } else if (mode == kScattered) {
     return std::min(Param::num_agents_ - 1,
                     current_idx + scattered[num_neighbor]);
+    // return (current_idx * scattered[num_neighbor]) % Param::num_agents_;
   }
   throw false;
 }
@@ -108,6 +130,17 @@ double Classic(std::vector<Agent> agents, NeighborMode mode,
     total_sum += tl_sum;
   }
   return total_sum;
+}
+
+// -----------------------------------------------------------------------------
+void Sort(std::vector<Agent> agents) {
+
+  std::random_device rd;
+  std::mt19937 g(rd());
+
+  std::shuffle(agents.begin(), agents.end(), g);
+  Timer timer("sort    ");
+  std::sort(agents.begin(), agents.end());
 }
 
 // -----------------------------------------------------------------------------
@@ -169,7 +202,7 @@ double Patch(std::vector<Agent> agents, NeighborMode mode, TWorkload workload,
       for (uint64_t r = 0; r < reuse + 1 && r + i < num_agents; r++) {
         tl_sum += workload(for_each_neighbor, &copy, 0);
         write_back_cache = copy;
-        // for (int el = 0; el < Param::neighbors_per_agent_; el++) {
+        // for (uint64_t el = 0; el < Param::neighbors_per_agent_; el++) {
         //   write_back_cache[el] += copy[el];
         // }
       }
@@ -206,6 +239,9 @@ inline void Run(NeighborMode mode, TWorkload workload) {
     }
     std::cout << std::endl << std::endl;
   }
+
+  FlushCache();
+  Sort(agents);
 
   FlushCache();
 
