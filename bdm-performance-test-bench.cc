@@ -32,6 +32,8 @@ class Agent {
     }
   }
 
+  uint32_t GetUuid() const { return uuid_; }
+
   double Compute() {
     double sum = 0;
     for (int i = 0; i < 18; i++) {
@@ -72,13 +74,13 @@ class Agent {
   }
 
  private:
-  static uint64_t counter_;
-  uint64_t uuid_;
+  static uint32_t counter_;
+  uint32_t uuid_;
   double data_r_[18];
   double data_w_[18];
 };
 
-uint64_t Agent::counter_ = 0;
+uint32_t Agent::counter_ = 0;
 
 inline void FlushCache() {
   const uint64_t bigger_than_cachesize = 100 * 1024 * 1024;
@@ -147,7 +149,34 @@ void Sort(std::vector<Agent> agents) {
 
   std::shuffle(agents.begin(), agents.end(), g);
   Timer timer("sort    ");
+  // https://gcc.gnu.org/onlinedocs/libstdc++/manual/parallel_mode_using.html#parallel_mode.using.specific
   __gnu_parallel::sort(agents.begin(), agents.end());
+}
+
+// -----------------------------------------------------------------------------
+void SortMinCopies(std::vector<Agent> agents) {
+
+  std::random_device rd;
+  std::mt19937 g(rd());
+
+  std::shuffle(agents.begin(), agents.end(), g);
+
+  std::vector<uint32_t> uuids;
+  uuids.reserve(agents.size());
+  for (uint64_t i = 0; i < agents.size(); i++) {
+    uuids.push_back(agents[i].GetUuid() % agents.size());
+  }
+  decltype(agents) sorted;
+  sorted.resize(agents.size());
+
+  Timer timer("sort MC ");
+  // https://gcc.gnu.org/onlinedocs/libstdc++/manual/parallel_mode_using.html#parallel_mode.using.specific
+  __gnu_parallel::sort(uuids.begin(), uuids.end());
+
+  #pragma omp parallel for
+  for(uint64_t i = 0; i < agents.size(); i++) {
+    sorted[i] = agents[uuids[i]];
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -259,8 +288,13 @@ inline void Run(NeighborMode mode, TWorkload workload) {
     EXPECT_NEAR(Patch(agents, mode, workload, r), expected);
   }
 
-  FlushCache();
-  Sort(agents);
+  if(mode == kScattered) {
+    FlushCache();
+    Sort(agents);
+
+    FlushCache();
+    SortMinCopies(agents);
+  }
 }
 
 inline void PrintNewSection(const std::string& message) {
