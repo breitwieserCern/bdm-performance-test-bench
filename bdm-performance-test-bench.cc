@@ -161,13 +161,14 @@ void SortMinCopies(std::vector<Agent> agents) {
 
   std::shuffle(agents.begin(), agents.end(), g);
 
+  decltype(agents) sorted;
+  sorted.resize(agents.size());
+
   std::vector<uint32_t> uuids;
   uuids.reserve(agents.size());
   for (uint64_t i = 0; i < agents.size(); i++) {
     uuids.push_back(agents[i].GetUuid() % agents.size());
   }
-  decltype(agents) sorted;
-  sorted.resize(agents.size());
 
   Timer timer("sort MC ");
   // https://gcc.gnu.org/onlinedocs/libstdc++/manual/parallel_mode_using.html#parallel_mode.using.specific
