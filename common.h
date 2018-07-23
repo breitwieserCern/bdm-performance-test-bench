@@ -4,9 +4,9 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <random>
 #include <string>
 #include <vector>
-#include <random>
 
 #include "param.h"
 
@@ -68,9 +68,7 @@ class Agent {
     return *this;
   }
 
-  bool operator<(const Agent& other) {
-    return uuid_ < other.uuid_;
-  }
+  bool operator<(const Agent& other) { return uuid_ < other.uuid_; }
 
   friend bool operator<(const Agent& lhs, const Agent& rhs) {
     return lhs.uuid_ < rhs.uuid_;
