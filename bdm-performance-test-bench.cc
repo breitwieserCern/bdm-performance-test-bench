@@ -10,107 +10,14 @@
 #include <iterator>
 #include <parallel/algorithm>
 
+#include "common.h"
 #include "param.h"
 #include "timer.h"
 
-// -----------------------------------------------------------------------------
-#define EXPECT_NEAR(expected, actual)                                        \
-  if (std::fabs((expected) - (actual)) > 1e-5) {                             \
-    std::cerr << "\033[1;31mWrong result on line: " << __LINE__ << "\033[0m" \
-              << std::endl;                                                  \
-  }
-
-// -----------------------------------------------------------------------------
-class Agent {
- public:
-  Agent() : uuid_(counter_++) {
-    for (uint64_t i = 0; i < 18; i++) {
-      data_r_[i] = 1;
-    }
-    for (uint64_t i = 0; i < 18; i++) {
-      data_w_[i] = 1;
-    }
-  }
-
-  uint32_t GetUuid() const { return uuid_; }
-
-  double Compute() {
-    double sum = 0;
-    for (int i = 0; i < 18; i++) {
-      sum += data_r_[i];
-      data_w_[i]++;
-    }
-    return sum / 18.0;
-  }
-
-  // not all data members of neighbors are accessed or updated
-  double ComputeNeighbor() {
-    double sum = 0;
-    for (int i = 0; i < 9; i++) {
-      sum += data_r_[i];
-    }
-    for (int i = 0; i < 6; i++) {
-      data_w_[i]++;
-    }
-    return sum / 9.0;
-  }
-
-  Agent& operator+=(Agent& other) {
-    // for (int i = 0; i < 9; i++) {
-    //   data_r_[i] += other.data_r_[i];
-    // }
-    for (int i = 0; i < 6; i++) {
-      data_w_[i] += other.data_w_[i];
-    }
-    return *this;
-  }
-
-  bool operator<(const Agent& other) {
-    return uuid_ < other.uuid_;
-  }
-
-  friend bool operator<(const Agent& lhs, const Agent& rhs) {
-    return lhs.uuid_ < rhs.uuid_;
-  }
-
- private:
-  static uint32_t counter_;
-  uint32_t uuid_;
-  double data_r_[18];
-  double data_w_[18];
-};
-
-uint32_t Agent::counter_ = 0;
-
-inline void FlushCache() {
-  const uint64_t bigger_than_cachesize = 100 * 1024 * 1024;
-  char* buffer = new char[bigger_than_cachesize];
-  for (uint64_t i = 0; i < bigger_than_cachesize; i++) {
-    buffer[i] = Param::num_agents_;
-  }
-  delete buffer;
-}
-
-enum NeighborMode { kConsecutive, kScattered };
-
-static std::vector<int64_t> scattered;
-
-inline uint64_t NeighborIndex(NeighborMode mode, uint64_t current_idx,
-                              uint64_t num_neighbor) {
-  if (mode == kConsecutive) {
-    return std::min(Param::num_agents_ - 1, current_idx + num_neighbor + 1);
-  } else if (mode == kScattered) {
-    return std::min(Param::num_agents_ - 1,
-                    current_idx + scattered[num_neighbor]);
-    // return (current_idx * scattered[num_neighbor]) % Param::num_agents_;
-  }
-  throw false;
-}
 
 // -----------------------------------------------------------------------------
 template <typename TWorkload>
-double Classic(std::vector<Agent> agents, NeighborMode mode,
-               TWorkload workload) {
+void Classic(NeighborMode mode, TWorkload workload, double expected) {
   auto for_each_neighbor = [&mode](uint64_t current_idx,
                                    std::vector<Agent>* agents,
                                    auto workload_neighbor) {
@@ -121,6 +28,9 @@ double Classic(std::vector<Agent> agents, NeighborMode mode,
     }
     return sum;
   };
+
+  std::vector<Agent> agents = Agent::Create(Param::num_agents_);
+  FlushCache();
 
   thread_local double tl_sum = 0;
 #pragma omp parallel
@@ -138,11 +48,14 @@ double Classic(std::vector<Agent> agents, NeighborMode mode,
 #pragma omp critical
     total_sum += tl_sum;
   }
-  return total_sum;
+
+  EXPECT_NEAR(total_sum, expected);
 }
 
 // -----------------------------------------------------------------------------
-void Sort(std::vector<Agent> agents) {
+void Sort() {
+  std::vector<Agent> agents = Agent::Create(Param::num_agents_);
+  FlushCache();
 
   std::random_device rd;
   std::mt19937 g(rd());
@@ -154,7 +67,9 @@ void Sort(std::vector<Agent> agents) {
 }
 
 // -----------------------------------------------------------------------------
-void SortMinCopies(std::vector<Agent> agents) {
+void SortMinCopies() {
+  std::vector<Agent> agents = Agent::Create(Param::num_agents_);
+  FlushCache();
 
   std::random_device rd;
   std::mt19937 g(rd());
@@ -182,8 +97,7 @@ void SortMinCopies(std::vector<Agent> agents) {
 
 // -----------------------------------------------------------------------------
 template <typename TWorkload>
-double Patch(std::vector<Agent> agents, NeighborMode mode, TWorkload workload,
-             uint64_t reuse) {
+void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse, double expected) {
   const uint64_t num_agents = Param::num_agents_;
 
   auto for_each_neighbor = [](uint64_t current_idx, std::vector<Agent>* patch,
@@ -211,6 +125,9 @@ double Patch(std::vector<Agent> agents, NeighborMode mode, TWorkload workload,
       (*agents)[nidx] = patch[i];
     }
   };
+
+  std::vector<Agent> agents = Agent::Create(num_agents);
+  FlushCache();
 
   thread_local std::vector<Agent> patch;
   thread_local std::vector<Agent> copy;
@@ -252,49 +169,22 @@ double Patch(std::vector<Agent> agents, NeighborMode mode, TWorkload workload,
 #pragma omp critical
     total_sum += tl_sum;
   }
-  return total_sum;
+  EXPECT_NEAR(total_sum, expected);
 }
 
 // -----------------------------------------------------------------------------
 template <typename TWorkload>
 inline void Run(NeighborMode mode, TWorkload workload) {
-  std::vector<Agent> agents;
-  agents.resize(Param::num_agents_);
-
-  if (mode == kScattered) {
-    scattered.resize(Param::neighbors_per_agent_);
-    for (uint64_t i = 0; i < Param::neighbors_per_agent_; i++) {
-      int range = Param::neighbor_range_;
-      double r = (rand() / static_cast<double>(RAND_MAX) - 0.5) *
-                 range;  // r (-range, range)
-      scattered[i] = static_cast<int64_t>(r);
-    }
-    std::cout << std::endl << "memory offsets: " << std::endl;
-    for (auto& el : scattered) {
-      std::cout << el << ", ";
-    }
-    std::cout << std::endl << std::endl;
-  }
 
   double expected =
       Param::num_agents_ *
       (1 + Param::neighbors_per_agent_ * Param::num_neighbor_ops_);
 
-  FlushCache();
-  EXPECT_NEAR(Classic(agents, mode, workload), expected);
+  Classic(mode, workload, expected);
 
   std::vector<uint64_t> reuse_vals = {0, 1, 2, 4, 8, 16, 32, 64};
   for (auto& r : reuse_vals) {
-    FlushCache();
-    EXPECT_NEAR(Patch(agents, mode, workload, r), expected);
-  }
-
-  if(mode == kScattered) {
-    FlushCache();
-    Sort(agents);
-
-    FlushCache();
-    SortMinCopies(agents);
+    Patch(mode, workload, r, expected);
   }
 }
 
@@ -343,6 +233,8 @@ int main(int argc, const char** argv) {
     return sum;
   };
 
+  Initialize();
+
   Agent a;
   std::cout << "Result for one agent: " << workload_per_cell(&a) << std::endl;
 
@@ -351,6 +243,10 @@ int main(int argc, const char** argv) {
 
   PrintNewSection("scattered access pattern");
   Run(kScattered, workload);
+
+  PrintNewSection("sorting");
+  Sort();
+  SortMinCopies();
 
   return 0;
 }
