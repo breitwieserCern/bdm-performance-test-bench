@@ -9,19 +9,21 @@
 #include <vector>
 
 #include "common.h"
+#include "copy-delay.h"
 #include "in-place.h"
 #include "param.h"
 #include "patch.h"
 #include "sort.h"
 
 // -----------------------------------------------------------------------------
-template <typename TWorkload>
-inline void Run(NeighborMode mode, TWorkload workload) {
+template <typename TWorkload, typename TWorkloadPerAgent, typename TWorkloadPerNeighbor>
+inline void Run(NeighborMode mode, TWorkload workload, TWorkloadPerAgent wpa, TWorkloadPerNeighbor wpn) {
   double expected =
       Param::num_agents_ *
       (1 + Param::neighbors_per_agent_ * Param::num_neighbor_ops_);
 
   InPlace(mode, workload, expected);
+  CopyDelay(mode, wpa, wpn, expected);
 
   std::vector<uint64_t> reuse_vals = {0, 1, 2, 4, 8, 16, 32, 64};
   for (auto& r : reuse_vals) {
@@ -51,7 +53,7 @@ int main(int argc, const char** argv) {
     return 1;
   }
 
-  auto workload_per_cell = [](Agent* current) {
+  auto workload_per_agent = [](Agent* current) {
     double sum = 0;
     sum += current->ComputeNeighbor();
     return sum;
@@ -67,7 +69,7 @@ int main(int argc, const char** argv) {
                       uint64_t current_idx) {
     double sum = 0;
     Agent* current = &((*agents)[current_idx]);
-    sum += workload_per_cell(current);
+    sum += workload_per_agent(current);
     for (uint64_t i = 0; i < Param::num_neighbor_ops_; i++) {
       sum += for_each_neighbor(current_idx, agents, workload_neighbor);
     }
@@ -77,13 +79,13 @@ int main(int argc, const char** argv) {
   Initialize();
 
   Agent a;
-  std::cout << "Result for one agent: " << workload_per_cell(&a) << std::endl;
+  std::cout << "Result for one agent: " << workload_per_agent(&a) << std::endl;
 
   PrintNewSection("strided access pattern");
-  Run(kConsecutive, workload);
+  Run(kConsecutive, workload, workload_per_agent, workload_neighbor);
 
   PrintNewSection("scattered access pattern");
-  Run(kScattered, workload);
+  // Run(kScattered, workload, workload_per_agent, workload_neighbor);
 
   PrintNewSection("sorting");
   Sort();

@@ -10,10 +10,10 @@ void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
   const uint64_t num_agents = Param::num_agents_;
 
   auto for_each_neighbor = [](uint64_t current_idx, std::vector<Agent>* patch,
-                              auto workload_per_cell) {
+                              auto workload_per_agent) {
     double sum = 0;
     for (uint64_t i = 1; i < patch->size(); i++) {
-      sum += workload_per_cell(&((*patch)[i]));
+      sum += workload_per_agent(&((*patch)[i]));
     }
     return sum;
   };
