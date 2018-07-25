@@ -38,38 +38,12 @@ class DelayedFunctions {
   // }
 
   void Delay(Functor&& f) {
-    // if(counter_ >= delayed_functions_.size()) {
-    //   #pragma omp critical
-    //   {
-    //     if(counter_ < delayed_functions_.size()) {
-    //       delayed_functions_.resize(delayed_functions_.size() * 1.5);
-    //     }
-    //   }
-    // } else {
-    //   delayed_functions_[counter_++] = f;
-    // }
-
-    // NB: not thread-safe: resize and assignment could happen at the same time
-    // int idx = counter_++;
-    // if (idx >= delayed_functions_.size()) {
-    //   #pragma omp critical
-    //   {
-    //     if(idx < delayed_functions_.size()) {
-    //       delayed_functions_.resize(delayed_functions_.size() * 1.5);
-    //     }
-    //   }
-    // } else {
-    //   delayed_functions_[idx] = f;
-    // }
-
     std::lock_guard<std::mutex> lock(mutex_);
     delayed_functions_.emplace_back(std::move(f));
   }
 
   double Execute() {
     double sum = 0;
-    // int size = counter_;
-    // for (int i = 0; i < size; i++) {
     for (int i = 0; i < delayed_functions_.size(); i++) {
       sum += delayed_functions_[i]();
     }
@@ -78,7 +52,6 @@ class DelayedFunctions {
 
  private:
   std::mutex mutex_;
-  // std::atomic<int> counter_;
   // std::vector<std::function<double()>> delayed_functions_;
   std::vector<Functor> delayed_functions_;
 };
