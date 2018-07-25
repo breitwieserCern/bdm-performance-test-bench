@@ -24,7 +24,7 @@ void InPlace(NeighborMode mode, TWorkload workload, double expected) {
 #pragma omp parallel
   tl_sum = 0;
 
-  Timer timer("inplace ");
+  Timer timer("inplace ", true);
 #pragma omp parallel for
   for (uint64_t i = 0; i < agents.size(); i++) {
     tl_sum += workload(for_each_neighbor, &agents, i);
