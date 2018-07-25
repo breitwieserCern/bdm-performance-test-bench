@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <mutex>
 #include <random>
 #include <string>
 #include <vector>
@@ -26,12 +27,25 @@ class Agent {
     return std::move(agents);
   }
 
+  static double ExpectedChecksum() {
+    return 3 * (18 + 6 * Param::mutated_neighbors_ + 18);
+  }
+
   Agent() : uuid_(counter_++) {
     for (uint64_t i = 0; i < 18; i++) {
       data_r_[i] = 1;
     }
     for (uint64_t i = 0; i < 18; i++) {
-      data_w_[i] = 1;
+      data_w_[i] = 0.0;
+    }
+  }
+
+  Agent(const Agent& other) : uuid_(other.uuid_) {
+    for (int i = 0; i < 18; i++) {
+      data_r_[i] = other.data_r_[i];
+    }
+    for (int i = 0; i < 18; i++) {
+      data_w_[i] = other.data_w_[i];
     }
   }
 
@@ -72,14 +86,36 @@ class Agent {
     }
   }
 
-  Agent& operator+=(Agent& other) {
+  double CheckSum() const {
+    double sum = 0;
+    for (int i = 0; i < 18; i++) {
+      sum += data_r_[i] * 3;
+    }
+    for (int i = 0; i < 18; i++) {
+      sum += data_w_[i] * 3;
+    }
+    return sum;
+  }
+
+  Agent& operator+=(const Agent& other) {
     // for (int i = 0; i < 9; i++) {
     //   data_r_[i] += other.data_r_[i];
     // }
-    for (int i = 0; i < 6; i++) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (int i = 0; i < 18; i++) {
       data_w_[i] += other.data_w_[i];
     }
     return *this;
+  }
+
+  Agent& operator=(const Agent& other) {
+    uuid_ = other.uuid_;
+    for (int i = 0; i < 18; i++) {
+      data_r_[i] = other.data_r_[i];
+    }
+    for (int i = 0; i < 18; i++) {
+      data_w_[i] = other.data_w_[i];
+    }
   }
 
   bool operator<(const Agent& other) { return uuid_ < other.uuid_; }
@@ -90,6 +126,7 @@ class Agent {
 
  private:
   static uint32_t counter_;
+  std::mutex mutex_;
   uint32_t uuid_;
   double data_r_[18];
   double data_w_[18];

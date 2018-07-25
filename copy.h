@@ -11,11 +11,15 @@ void Copy(NeighborMode mode, double expected) {
   auto for_each_neighbor = [&mode, &agents_t1](uint64_t current_idx,
                                                std::vector<Agent>* agents) {
     double sum = 0;
-    for (uint64_t i = 0; i < Param::neighbors_per_agent_; i++) {
+    for (uint64_t i = 0; i < Param::mutated_neighbors_; i++) {
       uint64_t nidx = NeighborIndex(mode, current_idx, i);
       Agent neighbor_cpy = (*agents)[nidx];
       sum += neighbor_cpy.ComputeNeighbor();
-      agents_t1[nidx] = neighbor_cpy;
+      agents_t1[nidx] += neighbor_cpy;
+    }
+    for (uint64_t i = Param::mutated_neighbors_; i < Param::neighbors_per_agent_; i++) {
+      uint64_t nidx = NeighborIndex(mode, current_idx, i);
+      sum += (*agents)[nidx].ComputeNeighborReadPart();
     }
     return sum;
   };
@@ -42,7 +46,7 @@ void Copy(NeighborMode mode, double expected) {
   for (uint64_t i = 0; i < agents.size(); i++) {
     copy = agents[i];
     tl_sum += workload(for_each_neighbor, &agents, &copy, i);
-    agents_t1[i] = copy;
+    agents_t1[i] += copy;
   }
 
   double total_sum = 0;
@@ -51,6 +55,13 @@ void Copy(NeighborMode mode, double expected) {
 #pragma omp critical
     total_sum += tl_sum;
   }
+
+  // check data member values
+  double checksum = 0;
+  for (uint64_t i = 0; i < agents.size(); i++) {
+    checksum += agents_t1[i].CheckSum();
+  }
+  total_sum += checksum;
 
   EXPECT_NEAR(total_sum, expected);
 }

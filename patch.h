@@ -9,11 +9,13 @@ void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
            double expected) {
   const uint64_t num_agents = Param::num_agents_;
 
-  auto for_each_neighbor = [](uint64_t current_idx, std::vector<Agent>* patch,
-                              auto workload_per_agent) {
+  auto for_each_neighbor = [](uint64_t current_idx, std::vector<Agent>* patch) {
     double sum = 0;
-    for (uint64_t i = 1; i < patch->size(); i++) {
-      sum += workload_per_agent(&((*patch)[i]));
+    for (uint64_t i = 1; i < Param::mutated_neighbors_ + 1; i++) {
+      sum += (*patch)[i].ComputeNeighbor();
+    }
+    for (uint64_t i = Param::mutated_neighbors_ + 1; i < patch->size(); i++) {
+      sum += (*patch)[i].ComputeNeighborReadPart();
     }
     return sum;
   };
@@ -28,14 +30,15 @@ void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
 
   auto write_back_patch = [&mode](auto* agents, const auto& patch,
                                   uint64_t current_idx) {
-    (*agents)[current_idx] = patch[0];
-    for (uint64_t i = 1; i < Param::neighbors_per_agent_; i++) {
-      uint64_t nidx = NeighborIndex(mode, current_idx, i);
-      (*agents)[nidx] = patch[i];
+    (*agents)[current_idx] += patch[0];
+    for (uint64_t i = 1; i < Param::mutated_neighbors_ + 1; i++) {
+      uint64_t nidx = NeighborIndex(mode, current_idx, i - 1);
+      (*agents)[nidx] += patch[i];
     }
   };
 
   std::vector<Agent> agents = Agent::Create(num_agents);
+  std::vector<Agent> agents_t1 = Agent::Create(num_agents);
   FlushCache();
 
   thread_local std::vector<Agent> patch;
@@ -58,7 +61,7 @@ void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
 
     if (reuse == 0) {
       tl_sum += workload(for_each_neighbor, &patch, 0);
-      write_back_patch(&agents, patch, i);
+      write_back_patch(&agents_t1, patch, i);
     } else {
       copy = patch;
       for (uint64_t r = 0; r < reuse + 1 && r + i < num_agents; r++) {
@@ -68,7 +71,7 @@ void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
         //   write_back_cache[el] += copy[el];
         // }
       }
-      write_back_patch(&agents, write_back_cache, i);
+      write_back_patch(&agents_t1, write_back_cache, i);
     }
   }
 
@@ -78,6 +81,14 @@ void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
 #pragma omp critical
     total_sum += tl_sum;
   }
+
+  // check data member values
+  double checksum = 0;
+  for (uint64_t i = 0; i < agents.size(); i++) {
+    checksum += agents_t1[i].CheckSum();
+  }
+  total_sum += checksum;
+
   EXPECT_NEAR(total_sum, expected);
 }
 

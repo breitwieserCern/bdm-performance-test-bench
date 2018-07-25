@@ -12,10 +12,18 @@
 
 struct Functor {
   Functor() {}
-  Functor(Agent* neighbor) : neighbor_(neighbor) {}
+  Functor(Agent* neighbor, bool mutate) : neighbor_(neighbor), mutate_(mutate) {}
 
-  double operator()() { return neighbor_->ComputeNeighbor(); }
+  double operator()() {
+    if(mutate_) {
+      return neighbor_->ComputeNeighbor();
+    } else {
+      return neighbor_->ComputeNeighborReadPart();
+    }
+  }
+
   Agent* neighbor_;
+  bool mutate_ = false;
 };
 
 class DelayedFunctions {
@@ -56,33 +64,31 @@ class DelayedFunctions {
   std::vector<Functor> delayed_functions_;
 };
 
-template <typename TWorkload, typename TWorkloadNeighbor>
-void CopyDelay(NeighborMode mode, TWorkload workload_per_agent,
-               TWorkloadNeighbor workload_neighbor, double expected) {
+void CopyDelay(NeighborMode mode, double expected) {
   std::vector<Agent> agents = Agent::Create(Param::num_agents_);
   std::vector<Agent> agents_t1 = Agent::Create(Param::num_agents_);
   std::vector<DelayedFunctions> delayed_functions;
   delayed_functions.resize(agents.size());
 
   auto for_each_neighbor = [&mode, &delayed_functions](
-      uint64_t current_idx, std::vector<Agent>* agents,
-      auto workload_neighbor) {
+      uint64_t current_idx, std::vector<Agent>* agents) {
     for (uint64_t i = 0; i < Param::neighbors_per_agent_; i++) {
       uint64_t nidx = NeighborIndex(mode, current_idx, i);
       auto* neighbor = &((*agents)[nidx]);
       // delayed_functions[nidx].Delay([](){
-      //   // return workload_neighbor(neighbor);
+      //   // return neighbor->ComputeNeighbor();
       // });
-      delayed_functions[nidx].Delay(Functor(neighbor));
+      bool mutate = i < Param::mutated_neighbors_;
+      delayed_functions[nidx].Delay(Functor(neighbor, mutate));
     }
   };
 
   auto workload = [&](auto for_each_neighbor, auto* agents, auto* current_agent,
                       uint64_t current_idx) {
     double sum = 0;
-    sum += workload_per_agent(current_agent);
+    sum += current_agent->Compute();
     for (uint64_t i = 0; i < Param::num_neighbor_ops_; i++) {
-      for_each_neighbor(current_idx, agents, workload_neighbor);
+      for_each_neighbor(current_idx, agents);
     }
     return sum;
   };
@@ -98,7 +104,7 @@ void CopyDelay(NeighborMode mode, TWorkload workload_per_agent,
 #pragma omp parallel for
   for (uint64_t i = 0; i < agents.size(); i++) {
     copy = agents[i];
-    tl_sum += workload(for_each_neighbor, &agents, &copy, i);
+    tl_sum += workload(for_each_neighbor, &agents_t1, &copy, i);
     agents_t1[i] = copy;
   }
 
@@ -113,6 +119,13 @@ void CopyDelay(NeighborMode mode, TWorkload workload_per_agent,
 #pragma omp critical
     total_sum += tl_sum;
   }
+
+  // check data member values
+  double checksum = 0;
+  for (uint64_t i = 0; i < agents.size(); i++) {
+    checksum += agents_t1[i].CheckSum();
+  }
+  total_sum += checksum;
 
   EXPECT_NEAR(total_sum, expected);
 }

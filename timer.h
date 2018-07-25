@@ -20,9 +20,9 @@ class Timer {
     int64_t duration = (Timestamp() - start_);
     std::cout << text_ << " " << std::setfill(' ') << std::setw(5) << duration
               << " ms";
-    if (reference_ != 0) {
+    if (!set_reference_ && reference_ != 0) {
       std::cout << "  - slowdown " << std::setprecision(2)
-                << duration / reference_;
+                << duration / reference_ << std::setprecision(17);
     }
     std::cout << std::endl;
     if (set_reference_) {

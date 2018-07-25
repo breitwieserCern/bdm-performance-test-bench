@@ -4,15 +4,23 @@
 #include "common.h"
 #include "timer.h"
 
+// This is the current solution that does not take discretization into account
+// and will lead to race conditions if neighbors are modified. This is the
+// baseline to quantify solutions that solve the two issues.
+
 template <typename TWorkload>
 void InPlace(NeighborMode mode, TWorkload workload, double expected) {
   auto for_each_neighbor = [&mode](uint64_t current_idx,
-                                   std::vector<Agent>* agents,
-                                   auto workload_neighbor) {
+                                   std::vector<Agent>* agents) {
     double sum = 0;
-    for (uint64_t i = 0; i < Param::neighbors_per_agent_; i++) {
+    for (uint64_t i = 0; i < Param::mutated_neighbors_; i++) {
       uint64_t nidx = NeighborIndex(mode, current_idx, i);
-      sum += workload_neighbor(&((*agents)[nidx]));
+      sum += (*agents)[nidx].ComputeNeighbor();
+    }
+    for (uint64_t i = Param::mutated_neighbors_;
+         i < Param::neighbors_per_agent_; i++) {
+      uint64_t nidx = NeighborIndex(mode, current_idx, i);
+      sum += (*agents)[nidx].ComputeNeighborReadPart();
     }
     return sum;
   };
@@ -36,6 +44,13 @@ void InPlace(NeighborMode mode, TWorkload workload, double expected) {
 #pragma omp critical
     total_sum += tl_sum;
   }
+
+  // check data member values
+  double checksum = 0;
+  for (uint64_t i = 0; i < agents.size(); i++) {
+    checksum += agents[i].CheckSum();
+  }
+  total_sum += checksum;
 
   EXPECT_NEAR(total_sum, expected);
 }

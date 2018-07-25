@@ -46,8 +46,8 @@ void TwoPasses(NeighborMode mode, double expected) {
 #pragma omp parallel for
   for (uint64_t i = 0; i < agents_t1.size(); i++) {
     auto* current = &(agents_t1[i]);
-    double increment = for_each_neighbor(i, &agents_t1);
-    current->ComputeNeighborWritePart(increment);
+    //FIXME double increment = for_each_neighbor(i, &agents_t1);
+    current->ComputeNeighborWritePart(Param::mutated_neighbors_);
   }
 
   double total_sum = 0;
@@ -56,6 +56,13 @@ void TwoPasses(NeighborMode mode, double expected) {
 #pragma omp critical
     total_sum += tl_sum;
   }
+
+  // check data member values
+  double checksum = 0;
+  for (uint64_t i = 0; i < agents.size(); i++) {
+    checksum += agents_t1[i].CheckSum();
+  }
+  total_sum += checksum;
 
   EXPECT_NEAR(total_sum, expected);
 }
