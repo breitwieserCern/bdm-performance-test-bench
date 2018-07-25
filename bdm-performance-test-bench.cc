@@ -10,20 +10,26 @@
 
 #include "common.h"
 #include "copy-delay.h"
+#include "copy.h"
 #include "in-place.h"
 #include "param.h"
 #include "patch.h"
 #include "sort.h"
+#include "two_passes.h"
 
 // -----------------------------------------------------------------------------
-template <typename TWorkload, typename TWorkloadPerAgent, typename TWorkloadPerNeighbor>
-inline void Run(NeighborMode mode, TWorkload workload, TWorkloadPerAgent wpa, TWorkloadPerNeighbor wpn) {
+template <typename TWorkload, typename TWorkloadPerAgent,
+          typename TWorkloadPerNeighbor>
+inline void Run(NeighborMode mode, TWorkload workload, TWorkloadPerAgent wpa,
+                TWorkloadPerNeighbor wpn) {
   double expected =
       Param::num_agents_ *
-      (1 + Param::neighbors_per_agent_ * Param::num_neighbor_ops_);
+      (1 + Param::neighbors_per_agent_ * Param::num_neighbor_ops_ / 2.0);
 
   InPlace(mode, workload, expected);
   CopyDelay(mode, wpa, wpn, expected);
+  Copy(mode, expected);
+  TwoPasses(mode, expected);
 
   std::vector<uint64_t> reuse_vals = {0, 1, 2, 4, 8, 16, 32, 64};
   for (auto& r : reuse_vals) {
@@ -53,16 +59,10 @@ int main(int argc, const char** argv) {
     return 1;
   }
 
-  auto workload_per_agent = [](Agent* current) {
-    double sum = 0;
-    sum += current->ComputeNeighbor();
-    return sum;
-  };
+  auto workload_per_agent = [](Agent* current) { return current->Compute(); };
 
   auto workload_neighbor = [](Agent* current) {
-    double sum = 0;
-    sum += current->Compute();
-    return sum;
+    return current->ComputeNeighbor();
   };
 
   auto workload = [&](auto for_each_neighbor, auto* agents,
@@ -85,7 +85,7 @@ int main(int argc, const char** argv) {
   Run(kConsecutive, workload, workload_per_agent, workload_neighbor);
 
   PrintNewSection("scattered access pattern");
-  // Run(kScattered, workload, workload_per_agent, workload_neighbor);
+  Run(kScattered, workload, workload_per_agent, workload_neighbor);
 
   PrintNewSection("sorting");
   Sort();

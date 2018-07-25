@@ -55,7 +55,21 @@ class Agent {
     for (int i = 0; i < 6; i++) {
       data_w_[i]++;
     }
-    return sum / 9.0;
+    return sum / 18.0;
+  }
+
+  double ComputeNeighborReadPart() const {
+    double sum = 0;
+    for (int i = 0; i < 9; i++) {
+      sum += data_r_[i];
+    }
+    return sum / 18.0;
+  }
+
+  void ComputeNeighborWritePart(double increment) {
+    for (int i = 0; i < 6; i++) {
+      data_w_[i] += increment;
+    }
   }
 
   Agent& operator+=(Agent& other) {
