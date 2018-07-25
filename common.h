@@ -116,6 +116,7 @@ class Agent {
     for (int i = 0; i < 18; i++) {
       data_w_[i] = other.data_w_[i];
     }
+    return *this;
   }
 
   bool operator<(const Agent& other) { return uuid_ < other.uuid_; }
