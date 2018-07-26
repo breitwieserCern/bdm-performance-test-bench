@@ -12,10 +12,11 @@
 
 struct Functor {
   Functor() {}
-  Functor(Agent* neighbor, bool mutate) : neighbor_(neighbor), mutate_(mutate) {}
+  Functor(Agent* neighbor, bool mutate)
+      : neighbor_(neighbor), mutate_(mutate) {}
 
   double operator()() {
-    if(mutate_) {
+    if (mutate_) {
       return neighbor_->ComputeNeighbor();
     } else {
       return neighbor_->ComputeNeighborReadPart();

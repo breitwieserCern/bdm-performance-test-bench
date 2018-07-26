@@ -20,12 +20,12 @@
 // -----------------------------------------------------------------------------
 template <typename TWorkload>
 inline void Run(NeighborMode mode, TWorkload workload) {
-
   double expected_checksum = Param::num_agents_ * Agent::ExpectedChecksum();
 
   double expected =
       Param::num_agents_ *
-      (1 + Param::neighbors_per_agent_ * Param::num_neighbor_ops_ / 2.0) + expected_checksum;
+          (1 + Param::neighbors_per_agent_ * Param::num_neighbor_ops_ / 2.0) +
+      expected_checksum;
 
   InPlace(mode, workload, expected);
   CopyDelay(mode, expected);
@@ -55,14 +55,16 @@ int main(int argc, const char** argv) {
   } else if (argc != 1) {
     std::cout << "Wrong number of arguments!" << std::endl
               << "Usage: " << std::endl
-              << "./bdm-performance-test-bench num_agents neighbors_per_agent mutated_neighbors_"
+              << "./bdm-performance-test-bench num_agents neighbors_per_agent "
+                 "mutated_neighbors_"
                  "num_neighbor_ops neighbor_range"
               << std::endl;
     return 1;
   }
 
   if (Param::mutated_neighbors_ > Param::neighbors_per_agent_) {
-    std::cout << "ERROR: Parameter mutated_neighbors_ > neighbors_per_agent_" << std::endl;
+    std::cout << "ERROR: Parameter mutated_neighbors_ > neighbors_per_agent_"
+              << std::endl;
     return 2;
   }
 

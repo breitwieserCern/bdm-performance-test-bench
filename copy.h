@@ -17,7 +17,8 @@ void Copy(NeighborMode mode, double expected) {
       sum += neighbor_cpy.ComputeNeighbor();
       agents_t1[nidx] += neighbor_cpy;
     }
-    for (uint64_t i = Param::mutated_neighbors_; i < Param::neighbors_per_agent_; i++) {
+    for (uint64_t i = Param::mutated_neighbors_;
+         i < Param::neighbors_per_agent_; i++) {
       uint64_t nidx = NeighborIndex(mode, current_idx, i);
       sum += (*agents)[nidx].ComputeNeighborReadPart();
     }
