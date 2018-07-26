@@ -46,18 +46,19 @@ inline void PrintNewSection(const std::string& message) {
 
 // -----------------------------------------------------------------------------
 int main(int argc, const char** argv) {
-  if (argc == 6) {
+  if (argc == 7) {
     Param::num_agents_ = std::atoi(argv[1]);
     Param::neighbors_per_agent_ = std::atoi(argv[2]);
     Param::mutated_neighbors_ = std::atoi(argv[3]);
     Param::num_neighbor_ops_ = std::atoi(argv[4]);
     Param::neighbor_range_ = std::atoi(argv[5]);
+    Param::compute_intense_ = std::atoi(argv[6]) != 0;
   } else if (argc != 1) {
     std::cout << "Wrong number of arguments!" << std::endl
               << "Usage: " << std::endl
               << "./bdm-performance-test-bench num_agents neighbors_per_agent "
                  "mutated_neighbors_"
-                 "num_neighbor_ops neighbor_range"
+                 "num_neighbor_ops neighbor_range compuate_intense"
               << std::endl;
     return 1;
   }

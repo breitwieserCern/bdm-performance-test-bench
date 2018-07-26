@@ -54,7 +54,11 @@ class Agent {
   double Compute() {
     double sum = 0;
     for (int i = 0; i < 18; i++) {
-      sum += data_r_[i];
+      if (Param::compute_intense_) {
+        sum += std::exp(data_r_[i] - 1.0);
+      } else {
+        sum += data_r_[i];
+      }
       data_w_[i]++;
     }
     return sum / 18.0;
@@ -64,7 +68,11 @@ class Agent {
   double ComputeNeighbor() {
     double sum = 0;
     for (int i = 0; i < 9; i++) {
-      sum += data_r_[i];
+      if (Param::compute_intense_) {
+        sum += std::exp(data_r_[i] - 1.0);
+      } else {
+        sum += data_r_[i];
+      }
     }
     for (int i = 0; i < 6; i++) {
       data_w_[i]++;

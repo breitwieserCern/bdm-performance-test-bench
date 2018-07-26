@@ -53,7 +53,7 @@ class DelayedFunctions {
 
   double Execute() {
     double sum = 0;
-    for (int i = 0; i < delayed_functions_.size(); i++) {
+    for (uint64_t i = 0; i < delayed_functions_.size(); i++) {
       sum += delayed_functions_[i]();
     }
     return sum;
