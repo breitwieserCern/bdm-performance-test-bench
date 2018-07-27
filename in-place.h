@@ -8,10 +8,10 @@
 // and will lead to race conditions if neighbors are modified. This is the
 // baseline to quantify solutions that solve the two issues.
 
-template <typename TWorkload>
+/// \tparam TAgent either Agent or SoaAgent
+template <typename TAgent, typename TWorkload>
 void InPlace(NeighborMode mode, TWorkload workload, double expected) {
-  auto for_each_neighbor = [&mode](uint64_t current_idx,
-                                   std::vector<Agent>* agents) {
+  auto for_each_neighbor = [&mode](uint64_t current_idx, auto* agents) {
     double sum = 0;
     for (uint64_t i = 0; i < Param::mutated_neighbors_; i++) {
       uint64_t nidx = NeighborIndex(mode, current_idx, i);
@@ -25,7 +25,7 @@ void InPlace(NeighborMode mode, TWorkload workload, double expected) {
     return sum;
   };
 
-  std::vector<Agent> agents = Agent::Create(Param::num_agents_);
+  auto&& agents = TAgent::Create(Param::num_agents_);
   FlushCache();
 
   thread_local double tl_sum = 0;

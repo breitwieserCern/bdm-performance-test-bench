@@ -50,4 +50,12 @@ void SortMinCopies() {
   }
 }
 
+// -----------------------------------------------------------------------------
+void SortMinCopiesSoa() {
+  auto&& agents = SoaAgent::Create(Param::num_agents_);
+  FlushCache();
+
+  agents.Sort();
+}
+
 #endif  // SORT_H_

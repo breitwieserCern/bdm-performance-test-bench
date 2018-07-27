@@ -4,12 +4,13 @@
 #include "common.h"
 #include "timer.h"
 
+template <typename TAgent>
 void TwoPasses(NeighborMode mode, double expected) {
-  std::vector<Agent> agents = Agent::Create(Param::num_agents_);
-  std::vector<Agent> agents_t1 = Agent::Create(Param::num_agents_);
+  auto&& agents = TAgent::Create(Param::num_agents_);
+  auto&& agents_t1 = TAgent::Create(Param::num_agents_);
 
   auto for_each_neighbor = [&mode, &agents_t1](uint64_t current_idx,
-                                               std::vector<Agent>* agents) {
+                                               auto* agents) {
     double sum = 0;
     for (uint64_t i = 0; i < Param::neighbors_per_agent_; i++) {
       uint64_t nidx = NeighborIndex(mode, current_idx, i);
@@ -18,10 +19,10 @@ void TwoPasses(NeighborMode mode, double expected) {
     return sum;
   };
 
-  auto workload = [&](auto for_each_neighbor, auto* agents, auto* current_agent,
-                      uint64_t current_idx) {
+  auto workload = [&](auto for_each_neighbor, auto* agents,
+                      auto&& current_agent, uint64_t current_idx) {
     double sum = 0;
-    sum += current_agent->Compute();
+    sum += current_agent.Compute();
     for (uint64_t i = 0; i < Param::num_neighbor_ops_; i++) {
       sum += for_each_neighbor(current_idx, agents);
     }
@@ -39,17 +40,17 @@ void TwoPasses(NeighborMode mode, double expected) {
 #pragma omp parallel for
   for (uint64_t i = 0; i < agents.size(); i++) {
     copy = agents[i];
-    tl_sum += workload(for_each_neighbor, &agents, &copy, i);
+    tl_sum += workload(for_each_neighbor, &agents, copy, i);
     agents_t1[i] = copy;
   }
 
 #pragma omp parallel for
   for (uint64_t i = 0; i < agents_t1.size(); i++) {
-    auto* current = &(agents_t1[i]);
+    auto&& current = agents_t1[i];
     double increment =
         for_each_neighbor(i, &agents) * 2 -
         (Param::neighbors_per_agent_ - Param::mutated_neighbors_);
-    current->ComputeNeighborWritePart(increment);
+    current.ComputeNeighborWritePart(increment);
   }
 
   double total_sum = 0;

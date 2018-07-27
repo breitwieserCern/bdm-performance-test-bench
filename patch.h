@@ -4,12 +4,12 @@
 #include "common.h"
 #include "timer.h"
 
-template <typename TWorkload>
+template <typename TAgent, typename TWorkload>
 void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
            double expected) {
   const uint64_t num_agents = Param::num_agents_;
 
-  auto for_each_neighbor = [](uint64_t current_idx, std::vector<Agent>* patch) {
+  auto for_each_neighbor = [](uint64_t current_idx, auto* patch) {
     double sum = 0;
     for (uint64_t i = 1; i < Param::mutated_neighbors_ + 1; i++) {
       sum += (*patch)[i].ComputeNeighbor();
@@ -20,7 +20,7 @@ void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
     return sum;
   };
 
-  auto add_neighbors_to_patch = [&mode](const auto& agents, auto* patch,
+  auto add_neighbors_to_patch = [&mode](auto& agents, auto* patch,
                                         uint64_t current_idx) {
     for (uint64_t i = 1; i < Param::neighbors_per_agent_ + 1; i++) {
       uint64_t nidx = NeighborIndex(mode, current_idx, i);
@@ -28,7 +28,7 @@ void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
     }
   };
 
-  auto write_back_patch = [&mode](auto* agents, const auto& patch,
+  auto write_back_patch = [&mode](auto* agents, auto& patch,
                                   uint64_t current_idx) {
     (*agents)[current_idx] += patch[0];
     for (uint64_t i = 1; i < Param::mutated_neighbors_ + 1; i++) {
@@ -37,13 +37,15 @@ void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
     }
   };
 
-  std::vector<Agent> agents = Agent::Create(num_agents);
-  std::vector<Agent> agents_t1 = Agent::Create(num_agents);
+  auto&& agents = TAgent::Create(num_agents);
+  auto&& agents_t1 = TAgent::Create(num_agents);
   FlushCache();
 
-  thread_local std::vector<Agent> patch;
-  thread_local std::vector<Agent> copy;
-  thread_local std::vector<Agent> write_back_cache;
+  using AgentContainer = std::decay_t<decltype(agents)>;
+
+  thread_local AgentContainer patch;
+  thread_local AgentContainer copy;
+  thread_local AgentContainer write_back_cache;
   thread_local double tl_sum = 0;
 
 #pragma omp parallel

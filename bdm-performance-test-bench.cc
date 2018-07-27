@@ -11,6 +11,7 @@
 #include "common.h"
 #include "copy-delay.h"
 #include "copy.h"
+#include "extract-datamember.h"
 #include "in-place.h"
 #include "param.h"
 #include "patch.h"
@@ -18,7 +19,7 @@
 #include "two_passes.h"
 
 // -----------------------------------------------------------------------------
-template <typename TWorkload>
+template <typename TAgent, typename TWorkload>
 inline void Run(NeighborMode mode, TWorkload workload) {
   double expected_checksum = Param::num_agents_ * Agent::ExpectedChecksum();
 
@@ -27,14 +28,14 @@ inline void Run(NeighborMode mode, TWorkload workload) {
           (1 + Param::neighbors_per_agent_ * Param::num_neighbor_ops_ / 2.0) +
       expected_checksum;
 
-  InPlace(mode, workload, expected);
-  CopyDelay(mode, expected);
-  Copy(mode, expected);
-  TwoPasses(mode, expected);
+  InPlace<TAgent>(mode, workload, expected);
+  CopyDelay<TAgent>(mode, expected);
+  Copy<TAgent>(mode, expected);
+  TwoPasses<TAgent>(mode, expected);
 
   std::vector<uint64_t> reuse_vals = {0, 1, 2, 4, 8, 16, 32, 64};
   for (auto& r : reuse_vals) {
-    Patch(mode, workload, r, expected);
+    Patch<TAgent>(mode, workload, r, expected);
   }
 }
 
@@ -72,8 +73,8 @@ int main(int argc, const char** argv) {
   auto workload = [&](auto for_each_neighbor, auto* agents,
                       uint64_t current_idx) {
     double sum = 0;
-    Agent* current = &((*agents)[current_idx]);
-    sum += current->Compute();
+    auto&& current = (*agents)[current_idx];
+    sum += current.Compute();
     for (uint64_t i = 0; i < Param::num_neighbor_ops_; i++) {
       sum += for_each_neighbor(current_idx, agents);
     }
@@ -82,15 +83,23 @@ int main(int argc, const char** argv) {
 
   Initialize();
 
-  PrintNewSection("strided access pattern");
-  Run(kConsecutive, workload);
+  PrintNewSection("strided access pattern AOS");
+  Run<Agent>(kConsecutive, workload);
+  PrintNewSection("strided access pattern SOA");
+  Run<SoaAgent>(kConsecutive, workload);
 
-  PrintNewSection("scattered access pattern");
-  Run(kScattered, workload);
+  PrintNewSection("scattered access pattern AOS");
+  Run<Agent>(kScattered, workload);
+  PrintNewSection("scattered access pattern SOA");
+  Run<SoaAgent>(kScattered, workload);
 
   PrintNewSection("sorting");
   Sort();
   SortMinCopies();
+  SortMinCopiesSoa();
+
+  PrintNewSection("extract datamember");
+  ExtractDatamember();
 
   return 0;
 }

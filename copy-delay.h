@@ -10,23 +10,41 @@
 // This scenario delays calls that mutate neighbors
 // It is overly optimistic using Functor instead of a generic std::function
 
+template <typename T, typename U, bool Expression>
+struct ttop;
+
+template <typename T, typename U>
+struct ttop<T, U, true> {
+  using type = T;
+};
+
+template <typename T, typename U>
+struct ttop<T, U, false> {
+  using type = U;
+};
+
+template <typename TAgent>
 struct Functor {
+  using TAgentRef = typename ttop<TAgent&, SoaRefAgent,
+                                  std::is_same<TAgent, Agent>::value>::type;
+
   Functor() {}
-  Functor(Agent* neighbor, bool mutate)
+  Functor(TAgentRef neighbor, bool mutate)
       : neighbor_(neighbor), mutate_(mutate) {}
 
   double operator()() {
     if (mutate_) {
-      return neighbor_->ComputeNeighbor();
+      return neighbor_.ComputeNeighbor();
     } else {
-      return neighbor_->ComputeNeighborReadPart();
+      return neighbor_.ComputeNeighborReadPart();
     }
   }
 
-  Agent* neighbor_;
+  TAgentRef neighbor_;
   bool mutate_ = false;
 };
 
+template <typename TAgent>
 class DelayedFunctions {
  public:
   DelayedFunctions() {
@@ -46,7 +64,7 @@ class DelayedFunctions {
   //   delayed_functions_[counter_++] = f;
   // }
 
-  void Delay(Functor&& f) {
+  void Delay(Functor<TAgent>&& f) {
     std::lock_guard<std::mutex> lock(mutex_);
     delayed_functions_.emplace_back(std::move(f));
   }
@@ -62,25 +80,25 @@ class DelayedFunctions {
  private:
   std::mutex mutex_;
   // std::vector<std::function<double()>> delayed_functions_;
-  std::vector<Functor> delayed_functions_;
+  std::vector<Functor<TAgent>> delayed_functions_;
 };
 
+template <typename TAgent>
 void CopyDelay(NeighborMode mode, double expected) {
-  std::vector<Agent> agents = Agent::Create(Param::num_agents_);
-  std::vector<Agent> agents_t1 = Agent::Create(Param::num_agents_);
-  std::vector<DelayedFunctions> delayed_functions;
+  auto&& agents = TAgent::Create(Param::num_agents_);
+  auto&& agents_t1 = TAgent::Create(Param::num_agents_);
+  std::vector<DelayedFunctions<TAgent>> delayed_functions;
   delayed_functions.resize(agents.size());
 
-  auto for_each_neighbor = [&mode, &delayed_functions](
-      uint64_t current_idx, std::vector<Agent>* agents) {
+  auto for_each_neighbor = [&mode, &delayed_functions](uint64_t current_idx,
+                                                       auto* agents) {
     for (uint64_t i = 0; i < Param::neighbors_per_agent_; i++) {
       uint64_t nidx = NeighborIndex(mode, current_idx, i);
-      auto* neighbor = &((*agents)[nidx]);
       // delayed_functions[nidx].Delay([](){
       //   // return neighbor->ComputeNeighbor();
       // });
       bool mutate = i < Param::mutated_neighbors_;
-      delayed_functions[nidx].Delay(Functor(neighbor, mutate));
+      delayed_functions[nidx].Delay(Functor<TAgent>((*agents)[nidx], mutate));
     }
   };
 

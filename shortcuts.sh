@@ -4,4 +4,4 @@ alias r='taskset -c 0-13,28-41 ./bdm-performance-test-bench $p'
 alias cr='c && r'
 alias t1="export OMP_NUM_THREADS=1"
 alias tall="unset OMP_NUM_THREADS"
-alias vtune='taskset -c 0-13,28-41 amplxe-cl -collect hotspots -- ./bdm-performance-test-bench $p'
+alias vtune='taskset -c 0-13,28-41 amplxe-cl -collect advanced-hotspots -- ./bdm-performance-test-bench $p'

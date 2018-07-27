@@ -4,12 +4,13 @@
 #include "common.h"
 #include "timer.h"
 
+template <typename TAgent>
 void Copy(NeighborMode mode, double expected) {
-  std::vector<Agent> agents = Agent::Create(Param::num_agents_);
-  std::vector<Agent> agents_t1 = Agent::Create(Param::num_agents_);
+  auto&& agents = TAgent::Create(Param::num_agents_);
+  auto&& agents_t1 = TAgent::Create(Param::num_agents_);
 
   auto for_each_neighbor = [&mode, &agents_t1](uint64_t current_idx,
-                                               std::vector<Agent>* agents) {
+                                               auto* agents) {
     double sum = 0;
     for (uint64_t i = 0; i < Param::mutated_neighbors_; i++) {
       uint64_t nidx = NeighborIndex(mode, current_idx, i);
