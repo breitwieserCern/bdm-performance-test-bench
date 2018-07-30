@@ -67,11 +67,15 @@ void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
     } else {
       copy = patch;
       for (uint64_t r = 0; r < reuse + 1 && r + i < num_agents; r++) {
-        tl_sum += workload(for_each_neighbor, &copy, 0);
-        write_back_cache = copy;
-        // for (uint64_t el = 0; el < Param::neighbors_per_agent_; el++) {
-        //   write_back_cache[el] += copy[el];
-        // }
+        patch = copy;
+        tl_sum += workload(for_each_neighbor, &patch, 0);
+        if (r == 0) {
+          write_back_cache = patch;
+        } else {
+          for (uint64_t el = 0; el < Param::mutated_neighbors_ + 1; el++) {
+            write_back_cache[el] += patch[el];
+          }
+        }
       }
       write_back_patch(&agents_t1, write_back_cache, i);
     }
