@@ -17,6 +17,7 @@
 #include "patch.h"
 #include "sort.h"
 #include "two_passes.h"
+#include "uuid-map.h"
 
 // -----------------------------------------------------------------------------
 template <typename TAgent, typename TWorkload>
@@ -98,8 +99,9 @@ int main(int argc, const char** argv) {
   SortMinCopies();
   SortMinCopiesSoa();
 
-  PrintNewSection("extract datamember");
+  PrintNewSection("miscellaneous");
   ExtractDatamember();
+  UuidMap();
 
   return 0;
 }
