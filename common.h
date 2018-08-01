@@ -16,10 +16,11 @@
 #include "timer.h"
 
 // -----------------------------------------------------------------------------
-#define EXPECT_NEAR(expected, actual)                                        \
-  if (std::fabs((expected) - (actual)) > 1e-5) {                             \
-    std::cerr << "\033[1;31mWrong result on line: " << __LINE__ << "\033[0m" \
-              << std::endl;                                                  \
+#define EXPECT_NEAR(actual, expected)                                \
+  if (std::fabs((expected) - (actual)) > 1e-5) {                     \
+    std::cerr << "\033[1;31mWrong result on line: " << __LINE__      \
+              << ", actual: " << actual << " expected: " << expected \
+              << "\033[0m" << std::endl;                             \
   }
 
 // -----------------------------------------------------------------------------
@@ -111,15 +112,11 @@ class Agent {
     return sum;
   }
 
-  Agent& operator+=(const Agent& other) {
-    // for (int i = 0; i < 9; i++) {
-    //   data_r_[i] += other.data_r_[i];
-    // }
+  void ApplyDelta(const Agent& ref, const Agent& modified) {
     std::lock_guard<std::mutex> lock(mutex_);
     for (int i = 0; i < 18; i++) {
-      data_w_[i] += other.data_w_[i];
+      data_w_[i] += (modified.data_w_[i] - ref.data_w_[i]);
     }
-    return *this;
   }
 
   Agent& operator=(const Agent& other) {
@@ -341,20 +338,19 @@ class SoaRefAgent {
     return sum;
   }
 
-  SoaRefAgent& operator+=(const SoaRefAgent& other) {
+  void ApplyDelta(const SoaRefAgent& ref, const Agent& modified) {
     std::lock_guard<std::mutex> lock(mutex_[kIdx]);
     for (int i = 0; i < 18; i++) {
-      data_w_[kIdx][i] += other.data_w_[other.kIdx][i];
+      data_w_[kIdx][i] += (modified.data_w_[i] - ref.data_w_[ref.kIdx][i]);
     }
-    return *this;
   }
 
-  SoaRefAgent& operator+=(const Agent& other) {
+  void ApplyDelta(const SoaRefAgent& ref, const SoaRefAgent& modified) {
     std::lock_guard<std::mutex> lock(mutex_[kIdx]);
     for (int i = 0; i < 18; i++) {
-      data_w_[kIdx][i] += other.data_w_[i];
+      data_w_[kIdx][i] +=
+          (modified.data_w_[modified.kIdx][i] - ref.data_w_[ref.kIdx][i]);
     }
-    return *this;
   }
 
   bool operator<(const SoaRefAgent& other) { return uuid_ < other.uuid_; }

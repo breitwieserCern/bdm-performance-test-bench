@@ -8,6 +8,8 @@ template <typename TAgent, typename TWorkload>
 void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
            double expected) {
   const uint64_t num_agents = Param::num_agents_;
+  auto&& agents = TAgent::Create(num_agents);
+  auto&& agents_t1 = TAgent::Create(num_agents);
 
   auto for_each_neighbor = [](uint64_t current_idx, auto* patch) {
     double sum = 0;
@@ -28,17 +30,15 @@ void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
     }
   };
 
-  auto write_back_patch = [&mode](auto* agents, auto& patch,
-                                  uint64_t current_idx) {
-    (*agents)[current_idx] += patch[0];
+  auto write_back_patch = [&mode, &agents](auto* dest, auto& patch,
+                                           uint64_t current_idx) {
+    (*dest)[current_idx].ApplyDelta(agents[current_idx], patch[0]);
     for (uint64_t i = 1; i < Param::mutated_neighbors_ + 1; i++) {
       uint64_t nidx = NeighborIndex(mode, current_idx, i - 1);
-      (*agents)[nidx] += patch[i];
+      (*dest)[nidx].ApplyDelta(agents[nidx], patch[i]);
     }
   };
 
-  auto&& agents = TAgent::Create(num_agents);
-  auto&& agents_t1 = TAgent::Create(num_agents);
   FlushCache();
 
   using AgentContainer = std::decay_t<decltype(agents)>;
@@ -73,7 +73,7 @@ void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
           write_back_cache = patch;
         } else {
           for (uint64_t el = 0; el < Param::mutated_neighbors_ + 1; el++) {
-            write_back_cache[el] += patch[el];
+            write_back_cache[el].ApplyDelta(copy[el], patch[el]);
           }
         }
       }
