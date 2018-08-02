@@ -7,9 +7,6 @@
 #include "common.h"
 #include "timer.h"
 
-// This scenario delays calls that mutate neighbors
-// It is overly optimistic using Functor instead of a generic std::function
-
 template <typename T, typename U, bool Expression>
 struct ttop;
 
@@ -83,6 +80,14 @@ class DelayedFunctions {
   std::vector<Functor<TAgent>> delayed_functions_;
 };
 
+/// This scenario delays calls that mutate neighbors.
+/// It adds them to a list of delayed functions of the neighbor. Therefore,
+/// neighbors are still modified, but the enqueuing is protected by a lock.
+/// It is overly optimistic using Functor instead of a generic std::function.
+/// The functor is only able to delay one type of call and it doesn't require
+/// a heap allocation.
+/// Assumes that calling non-const functions on neighbors can be delayed.
+/// Discretization issue is solved by copying the current agent.
 template <typename TAgent>
 void CopyDelay(NeighborMode mode, double expected) {
   auto&& agents = TAgent::Create(Param::num_agents_);

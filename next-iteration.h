@@ -11,6 +11,8 @@
 /// in the afector not in the afectee. Therefore, neighbors are not modified.
 /// In the next iteration each cell asks each neighbor if it has delayed calls
 /// for itself.
+/// Assumes that calling non-const functions on neighbors can be delayed.
+/// Discretization issue is solved by copying the current agent.
 /// There are no locks needed.
 /// Uses std::function to capture parameters of the delayed function calls.
 /// NB: This simplification doesn't pass the result check because the neighbor

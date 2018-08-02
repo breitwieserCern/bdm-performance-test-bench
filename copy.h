@@ -4,6 +4,10 @@
 #include "common.h"
 #include "timer.h"
 
+/// Copies each agent that is modified on demand and sums up all incremental
+/// changes to obtain the final result.
+/// User needs to write function ApplyDelta to calculate and apply the
+/// increments.
 template <typename TAgent>
 void Copy(NeighborMode mode, double expected) {
   auto&& agents = TAgent::Create(Param::num_agents_);

@@ -116,6 +116,10 @@ class Agent {
     return sum;
   }
 
+  /// Calculate increment between the modified version and the reference and
+  /// add it to this object.
+  /// Can also be used to validate results: e.g. a reference must not be changed
+  /// more than once in a single iteration.
   void ApplyDelta(const Agent& ref, const Agent& modified) {
     std::lock_guard<std::mutex> lock(mutex_);
     for (int i = 0; i < 18; i++) {
@@ -342,6 +346,7 @@ class SoaRefAgent {
     return sum;
   }
 
+  /// \see Agent::ApplyDelta
   void ApplyDelta(const SoaRefAgent& ref, const Agent& modified) {
     std::lock_guard<std::mutex> lock(mutex_[kIdx]);
     for (int i = 0; i < 18; i++) {
@@ -349,6 +354,7 @@ class SoaRefAgent {
     }
   }
 
+  /// \see Agent::ApplyDelta
   void ApplyDelta(const SoaRefAgent& ref, const SoaRefAgent& modified) {
     std::lock_guard<std::mutex> lock(mutex_[kIdx]);
     for (int i = 0; i < 18; i++) {

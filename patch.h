@@ -4,6 +4,13 @@
 #include "common.h"
 #include "timer.h"
 
+/// Copies all neighbors before the start of the computation and
+/// sums up all incremental changes to obtain the final result.
+/// Reuse, tries to reuse a patch to minimize data transfers, because it
+/// contains the same set of agents.
+/// This happens for example if agents are in the same grid box.
+/// User needs to write function ApplyDelta to calculate and apply the
+/// increments.
 template <typename TAgent, typename TWorkload>
 void Patch(NeighborMode mode, TWorkload workload, uint64_t reuse,
            double expected) {

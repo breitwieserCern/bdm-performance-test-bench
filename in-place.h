@@ -4,10 +4,9 @@
 #include "common.h"
 #include "timer.h"
 
-// This is the current solution that does not take discretization into account
-// and will lead to race conditions if neighbors are modified. This is the
-// baseline to quantify solutions that solve the two issues.
-
+/// This is the current solution that does not take discretization into account
+/// and will lead to race conditions if neighbors are modified. This is the
+/// baseline to quantify solutions that solve the two issues.
 /// \tparam TAgent either Agent or SoaAgent
 template <typename TAgent, typename TWorkload>
 void InPlace(NeighborMode mode, TWorkload workload, double expected) {
