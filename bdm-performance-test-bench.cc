@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "common.h"
-#include "copy-delay.h"
 #include "copy.h"
+#include "delay.h"
 #include "extract-datamember.h"
 #include "in-place.h"
 #include "next-iteration.h"
@@ -30,7 +30,7 @@ inline void Run(NeighborMode mode, TWorkload workload) {
       expected_checksum;
 
   InPlace<TAgent>(mode, workload, expected);
-  CopyDelay<TAgent>(mode, expected);
+  Delay<TAgent>(mode, expected);
   Copy<TAgent>(mode, expected);
   NextIteration<TAgent>(mode, expected);
 

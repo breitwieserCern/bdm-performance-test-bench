@@ -2,6 +2,7 @@
 #define COPY_DELAY_H_
 
 #include <atomic>
+#include <functional>
 #include <mutex>
 
 #include "common.h"
@@ -44,66 +45,76 @@ struct Functor {
 template <typename TAgent>
 class DelayedFunctions {
  public:
-  DelayedFunctions() {
-    // delayed_functions_.resize(Param::neighbors_per_agent_);
-    delayed_functions_.reserve(Param::neighbors_per_agent_);
-  }
+  DelayedFunctions() {}
   DelayedFunctions(const DelayedFunctions&) {}
 
-  // void Delay(std::function<double()>&& f) {
-  //   // std::lock_guard<std::mutex> lock(mutex);
-  //   // delayed_functions_.emplace_back(std::move(f));
-  //   if(counter_ > delayed_functions_.size()) {
-  //     std::cout <<
-  //     "-----------------------------------------------------------" <<
-  //     std::endl;
-  //   }
-  //   delayed_functions_[counter_++] = f;
-  // }
+  void Initialize(bool use_function) {
+    use_function_ = use_function;
+    if (use_function_) {
+      delayed_functions_.reserve(Param::neighbors_per_agent_);
+    } else {
+      delayed_functors_.reserve(Param::neighbors_per_agent_);
+    }
+  }
 
   void Delay(Functor<TAgent>&& f) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    delayed_functors_.emplace_back(std::move(f));
+  }
+
+  void Delay(std::function<double()>&& f) {
     std::lock_guard<std::mutex> lock(mutex_);
     delayed_functions_.emplace_back(std::move(f));
   }
 
   double Execute() {
     double sum = 0;
-    for (uint64_t i = 0; i < delayed_functions_.size(); i++) {
-      sum += delayed_functions_[i]();
+    if (use_function_) {
+      for (uint64_t i = 0; i < delayed_functions_.size(); i++) {
+        sum += delayed_functions_[i]();
+      }
+    } else {
+      for (uint64_t i = 0; i < delayed_functors_.size(); i++) {
+        sum += delayed_functors_[i]();
+      }
     }
     return sum;
   }
 
  private:
   std::mutex mutex_;
-  // std::vector<std::function<double()>> delayed_functions_;
-  std::vector<Functor<TAgent>> delayed_functions_;
+  bool use_function_;
+  std::vector<std::function<double()>> delayed_functions_;
+  std::vector<Functor<TAgent>> delayed_functors_;
 };
 
-/// This scenario delays calls that mutate neighbors.
-/// It adds them to a list of delayed functions of the neighbor. Therefore,
-/// neighbors are still modified, but the enqueuing is protected by a lock.
-/// It is overly optimistic using Functor instead of a generic std::function.
-/// The functor is only able to delay one type of call and it doesn't require
-/// a heap allocation.
-/// Assumes that calling non-const functions on neighbors can be delayed.
-/// Discretization issue is solved by copying the current agent.
 template <typename TAgent>
-void CopyDelay(NeighborMode mode, double expected) {
+void DelayInternal(NeighborMode mode, double expected, bool use_function) {
   auto&& agents = TAgent::Create(Param::num_agents_);
   auto&& agents_t1 = TAgent::Create(Param::num_agents_);
+
   std::vector<DelayedFunctions<TAgent>> delayed_functions;
   delayed_functions.resize(agents.size());
+  for (auto& el : delayed_functions) {
+    el.Initialize(use_function);
+  }
 
-  auto for_each_neighbor = [&mode, &delayed_functions](uint64_t current_idx,
-                                                       auto* agents) {
+  auto for_each_neighbor = [&mode, &delayed_functions, use_function](
+      uint64_t current_idx, auto* agents) {
     for (uint64_t i = 0; i < Param::neighbors_per_agent_; i++) {
       uint64_t nidx = NeighborIndex(mode, current_idx, i);
-      // delayed_functions[nidx].Delay([](){
-      //   // return neighbor->ComputeNeighbor();
-      // });
       bool mutate = i < Param::mutated_neighbors_;
-      delayed_functions[nidx].Delay(Functor<TAgent>((*agents)[nidx], mutate));
+      if (use_function) {
+        delayed_functions[nidx].Delay([=]() {
+          if (mutate) {
+            return (*agents)[nidx].ComputeNeighbor();
+          } else {
+            return (*agents)[nidx].ComputeNeighborReadPart();
+          }
+        });
+      } else {
+        delayed_functions[nidx].Delay(Functor<TAgent>((*agents)[nidx], mutate));
+      }
     }
   };
 
@@ -124,7 +135,13 @@ void CopyDelay(NeighborMode mode, double expected) {
 #pragma omp parallel
   tl_sum = 0;
 
-  Timer timer("cpy-dly ");
+  std::string timer_name;
+  if (use_function) {
+    timer_name = "delay 0 ";
+  } else {
+    timer_name = "delay 1 ";
+  }
+  Timer timer(timer_name);
 #pragma omp parallel for
   for (uint64_t i = 0; i < agents.size(); i++) {
     copy = agents[i];
@@ -152,6 +169,20 @@ void CopyDelay(NeighborMode mode, double expected) {
   total_sum += checksum;
 
   EXPECT_NEAR(total_sum, expected);
+}
+
+/// This scenario delays calls that mutate neighbors.
+/// It adds them to a list of delayed functions of the neighbor. Therefore,
+/// neighbors are still modified, but the enqueuing is protected by a lock.
+/// Runs two versions: using a Functor and a std::function.
+/// Using a functor is overly optimistic. It is only able to delay one type of
+/// call and it doesn't require a heap allocation.
+/// Assumes that calling non-const functions on neighbors can be delayed.
+/// Discretization issue is solved by copying the current agent.
+template <typename TAgent>
+void Delay(NeighborMode mode, double expected) {
+  DelayInternal<TAgent>(mode, expected, true);
+  DelayInternal<TAgent>(mode, expected, false);
 }
 
 #endif  // COPY_DELAY_H_
