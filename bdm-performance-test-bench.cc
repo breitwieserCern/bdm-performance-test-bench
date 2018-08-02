@@ -13,10 +13,10 @@
 #include "copy.h"
 #include "extract-datamember.h"
 #include "in-place.h"
+#include "next-iteration.h"
 #include "param.h"
 #include "patch.h"
 #include "sort.h"
-#include "two_passes.h"
 #include "uuid-map.h"
 
 // -----------------------------------------------------------------------------
@@ -32,7 +32,7 @@ inline void Run(NeighborMode mode, TWorkload workload) {
   InPlace<TAgent>(mode, workload, expected);
   CopyDelay<TAgent>(mode, expected);
   Copy<TAgent>(mode, expected);
-  TwoPasses<TAgent>(mode, expected);
+  NextIteration<TAgent>(mode, expected);
 
   std::vector<uint64_t> reuse_vals = {0, 1, 2, 4, 8, 16, 32, 64};
   for (auto& r : reuse_vals) {

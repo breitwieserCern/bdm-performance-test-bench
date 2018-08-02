@@ -90,14 +90,18 @@ class Agent {
   double ComputeNeighborReadPart() const {
     double sum = 0;
     for (int i = 0; i < 9; i++) {
-      sum += data_r_[i];
+      if (Param::compute_intense_) {
+        sum += std::exp(data_r_[i] - 1.0);
+      } else {
+        sum += data_r_[i];
+      }
     }
     return sum / 18.0;
   }
 
-  void ComputeNeighborWritePart(double increment) {
+  void ComputeNeighborWritePart() {
     for (int i = 0; i < 6; i++) {
-      data_w_[i] += increment;
+      data_w_[i]++;
     }
   }
 
@@ -321,9 +325,9 @@ class SoaRefAgent {
     return sum / 18.0;
   }
 
-  void ComputeNeighborWritePart(double increment) {
+  void ComputeNeighborWritePart() {
     for (int i = 0; i < 6; i++) {
-      data_w_[kIdx][i] += increment;
+      data_w_[kIdx][i]++;
     }
   }
 
@@ -400,6 +404,9 @@ enum NeighborMode { kConsecutive, kScattered };
 static std::vector<int64_t> scattered;
 
 // -----------------------------------------------------------------------------
+/// Generates neighbor index.
+/// Used to test different memory access patterns.
+/// NB: Neighbor relations are not symmetric (Neighbor(A): B != Neighbor(B): A)
 inline uint64_t NeighborIndex(NeighborMode mode, uint64_t current_idx,
                               uint64_t num_neighbor) {
   if (mode == kConsecutive) {
@@ -419,8 +426,14 @@ inline void Initialize() {
     int range = Param::neighbor_range_;
     // r (-range, range)
     double r = (rand() / static_cast<double>(RAND_MAX) - 0.5) * range;
-    scattered[i] = static_cast<int64_t>(r);
+    int64_t val = static_cast<int64_t>(r);
+    // avoid neighbor index of 0:
+    if (!val) {
+      val++;
+    }
+    scattered[i] = val;
   }
+
   std::cout << std::endl << "memory offsets: " << std::endl;
   for (auto& el : scattered) {
     std::cout << el << ", ";
